@@ -7,6 +7,10 @@ opencode-Plugin, das im opencode-Prozess einen kleinen Webserver startet und Orc
 - Subagents (Child-Sessions mit `parentID`) laufen zur Tür rein, setzen sich an ihren Platz, gehen wieder wenn fertig
 - Sprechblasen mit Tool-Icon (read/edit/bash/grep/web/task/todo) oder Text-/Denk-Snippet
 - Seitenpanel: Agent-Baum, Status, Tokens/Kosten/Modell, Todos, Aktivitäts-Feed
+- Tag/Nacht nach lokaler Uhrzeit mit Licht-Pools (erzwingbar per `?time=day` / `?time=night`),
+  Wand-TV mit aktiven Agents + Tokens, echte Uhr, Whiteboard mit Todo-Fortschritt, Büro-Katze
+- Bereichsschilder auf dem Boden (3×5-Pixelfont, beim Rauszoomen UI-Font); Namen und Bubbles werden
+  kollisionsfrei nach Priorität platziert
 - Rein lesend, keine Steuerung; keine Runtime-Dependencies, eine einzige JS-Datei
 
 | Agent | Platz |

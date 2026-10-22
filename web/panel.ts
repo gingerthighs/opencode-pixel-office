@@ -1,7 +1,8 @@
 // DOM side panel + room tabs. Everything goes through textContent (no innerHTML with data).
 
 import type { Agent, FeedEntry, Room } from "../src/types.ts";
-import { roleOf, STATUS_COLOR, STATUS_LABEL } from "./roles.ts";
+import { lookOf, roleOf, STATUS_COLOR, STATUS_LABEL } from "./roles.ts";
+import { avatarURL, iconURL, toolIcon, type IconName } from "./sprites.ts";
 import type { ClientState } from "./state.ts";
 
 const STALE_ROOM = 2 * 60 * 60 * 1000;
@@ -11,6 +12,13 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   if (cls) e.className = cls;
   if (text !== undefined) e.textContent = text;
   return e;
+}
+
+function img(src: string, cls: string, alt = ""): HTMLImageElement {
+  const i = el("img", cls);
+  i.src = src;
+  i.alt = alt;
+  return i;
 }
 
 /** Replace children only when the markup actually changed, so hover/clicks survive the 250ms refresh. */
@@ -37,17 +45,35 @@ function fmtAge(ms: number) {
   return Math.round(s / 3600) + "h";
 }
 
-const FEED_ICON: Record<FeedEntry["kind"], string> = {
-  tool: "🔧",
-  text: "💬",
-  think: "💭",
-  prompt: "📝",
-  status: "•",
-  spawn: "✈️",
-  error: "⛔",
-  todo: "📋",
-  ask: "✋",
-};
+function feedIcon(f: FeedEntry): IconName {
+  switch (f.kind) {
+    case "tool":
+      return toolIcon(f.text.split(/[\s·]/)[0] ?? "");
+    case "text":
+      return "speech";
+    case "think":
+      return "think";
+    case "prompt":
+      return "page";
+    case "spawn":
+      return "plane";
+    case "error":
+      return "alert";
+    case "todo":
+      return "clipboard";
+    case "ask":
+      return "question";
+    default:
+      return f.text === "fertig" ? "check" : "gear";
+  }
+}
+
+function pill(a: Agent) {
+  const k = statusKey(a);
+  const p = el("span", "pill " + k, STATUS_LABEL[k]);
+  p.style.setProperty("--c", STATUS_COLOR[k]);
+  return p;
+}
 
 export interface PanelCallbacks {
   selectRoom(id: string): void;
@@ -82,17 +108,17 @@ export class Panel {
   private renderTabs(current?: string) {
     const rooms = this.visibleRooms(current);
     const nodes = rooms.map((r) => {
-        const b = el("button", "tab" + (r.id === current ? " active" : ""));
-        b.dataset.id = r.id;
-        b.title = `${r.directory}\n${r.title}`;
-        const dot = el("span", "dot");
-        dot.style.background = this.state.roomBusy(r.id) ? STATUS_COLOR.busy : STATUS_COLOR.idle;
-        // v2 session listings carry no title until the session gets one
-        const title = r.title !== "Session" ? r.title : new Date(r.createdAt).toLocaleString([], { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-        b.append(dot, el("span", "proj", basename(r.directory) || "—"), el("span", "ttl", title));
-        b.onclick = () => this.cb.selectRoom(r.id);
-        return b;
-      });
+      const busy = this.state.roomBusy(r.id);
+      const b = el("button", "tab" + (r.id === current ? " active" : "") + (busy ? " busy" : ""));
+      b.dataset.id = r.id;
+      b.title = `${r.directory}\n${r.title}`;
+      // v2 session listings carry no title until the session gets one
+      const title = r.title !== "Session" ? r.title : new Date(r.createdAt).toLocaleString([], { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const agents = this.state.roomAgents(r.id).filter((a) => a.status !== "done").length;
+      b.append(el("span", "dot"), el("span", "proj", basename(r.directory) || "—"), el("span", "ttl", title), el("span", "count", String(agents)));
+      b.onclick = () => this.cb.selectRoom(r.id);
+      return b;
+    });
     swap(this.tabs, nodes.length ? nodes : [el("span", "muted", "keine Sessions")]);
   }
 
@@ -111,56 +137,83 @@ export class Panel {
       }
     };
     walk(undefined, 0);
-    swap(this.list, rows.length ? rows : [el("div", "muted", "Niemand im Büro.")]);
+    const head = el("div", "list-head");
+    const busy = agents.filter((a) => a.status === "busy" || a.status === "retry").length;
+    head.append(el("span", "", "Team"), el("span", "muted-inline", `${busy} aktiv · ${agents.length} gesamt`));
+    swap(this.list, rows.length ? [head, ...rows] : [head, el("div", "muted", "Niemand im Büro.")]);
   }
 
   private row(a: Agent, depth: number, selected: boolean) {
     const r = el("button", "agent" + (selected ? " sel" : "") + (a.status === "done" ? " done" : ""));
     r.dataset.id = a.id;
-    r.style.paddingLeft = 10 + depth * 14 + "px";
-    const dot = el("span", "dot");
-    dot.style.background = STATUS_COLOR[statusKey(a)];
+    r.style.setProperty("--depth", String(depth));
+    if (depth) r.append(el("span", "branch"));
+    r.append(img(avatarURL(lookOf(a.name, a.id)), "avatar", a.name));
     const main = el("span", "main");
-    const title = el("span", "name", a.name);
-    title.append(el("span", "role", roleLabel(a.name)));
-    main.append(title);
+    const top = el("span", "top");
+    top.append(el("span", "name", a.name), el("span", "role", roleLabel(a.name)), pill(a));
+    main.append(top);
     const live = a.tool && (a.tool.state === "running" || a.tool.state === "pending");
-    const sub = el("span", "sub", a.waiting ? "✋ wartet auf Freigabe" : live ? `${a.tool!.name} · ${a.tool!.title}` : STATUS_LABEL[statusKey(a)]);
+    const sub = el("span", "sub");
+    if (a.waiting) sub.append(img(iconURL("question"), "ico"), document.createTextNode("wartet auf Freigabe / Antwort"));
+    else if (live) sub.append(img(iconURL(toolIcon(a.tool!.name)), "ico"), document.createTextNode(`${a.tool!.name} · ${a.tool!.title}`));
+    else if (a.snippet && a.status === "busy") sub.append(img(iconURL(a.snippet.kind === "think" ? "think" : "speech"), "ico"), document.createTextNode(a.snippet.text));
+    else sub.append(document.createTextNode(a.tokens ? `${fmtTokens(a.tokens)} Tokens` : roleOf(a.name).label));
     main.append(sub);
-    r.append(dot, main);
+    r.append(main);
     r.onclick = () => this.cb.selectAgent(selected ? undefined : a.id);
     return r;
   }
 
   private renderDetail(a?: Agent) {
     if (!a) {
-      swap(this.detail, [el("div", "muted hint", "Figur oder Eintrag anklicken für Details.")]);
+      const hint = el("div", "hint");
+      hint.append(img(iconURL("magnifier"), "ico"), document.createTextNode("Figur oder Eintrag anklicken für Details."));
+      swap(this.detail, [hint]);
       return;
     }
     const head = el("div", "d-head");
-    const dot = el("span", "dot");
-    dot.style.background = STATUS_COLOR[statusKey(a)];
-    head.append(dot, el("strong", "", a.name), el("span", "role", roleLabel(a.name)));
+    head.append(img(avatarURL(lookOf(a.name, a.id)), "avatar big", a.name));
+    const names = el("div", "d-names");
+    const line = el("div", "d-line");
+    line.append(el("strong", "", a.name), pill(a));
+    names.append(line, el("span", "role", roleLabel(a.name) || roleOf(a.name).label));
+    head.append(names);
+    const parts: HTMLElement[] = [head];
+    if (a.title) parts.push(el("div", "d-title", a.title));
+
     const stats = el("div", "stats");
     const stat = (k: string, v: string) => {
       const s = el("div", "stat");
       s.append(el("span", "k", k), el("span", "v", v));
       stats.append(s);
     };
-    stat("Status", STATUS_LABEL[statusKey(a)]);
     stat("Tokens", fmtTokens(a.tokens));
     stat("Kosten", a.cost ? "$" + a.cost.toFixed(4) : "–");
     stat("Modell", a.model ?? "–");
-    const parts: HTMLElement[] = [head];
-    if (a.title) parts.push(el("div", "d-title", a.title));
+    stat("Aktiv seit", fmtAge(this.state.age(a.createdAt)));
     parts.push(stats);
 
+    if (a.tool) {
+      const cur = el("div", "current " + a.tool.state);
+      cur.append(img(iconURL(a.tool.state === "error" ? "alert" : toolIcon(a.tool.name)), "ico"), el("strong", "", a.tool.name), el("span", "", a.tool.title));
+      parts.push(cur);
+    }
+
     if (a.todos.length) {
+      const done = a.todos.filter((t) => t.status === "completed").length;
       const box = el("div", "todos");
-      box.append(el("h4", "", `Todos (${a.todos.filter((t) => t.status === "completed").length}/${a.todos.length})`));
+      box.append(el("h4", "", `Todos ${done}/${a.todos.length}`));
+      const bar = el("div", "bar");
+      const fill = el("span");
+      fill.style.width = `${Math.round((100 * done) / a.todos.length)}%`;
+      bar.append(fill);
+      box.append(bar);
       for (const t of a.todos) {
-        const mark = t.status === "completed" ? "☑" : t.status === "in_progress" ? "▶" : t.status === "cancelled" ? "✕" : "☐";
-        box.append(el("div", "todo " + t.status, `${mark} ${t.content}`));
+        const mark = t.status === "completed" ? "✔" : t.status === "in_progress" ? "▶" : t.status === "cancelled" ? "✕" : "·";
+        const row = el("div", "todo " + t.status);
+        row.append(el("span", "mark", mark), el("span", "", t.content));
+        box.append(row);
       }
       parts.push(box);
     }
@@ -170,7 +223,7 @@ export class Panel {
     fb.append(el("h4", "", "Aktivität"));
     for (const f of feed.slice(-120).reverse()) {
       const row = el("div", "f " + f.kind);
-      row.append(el("span", "t", fmtAge(this.state.age(f.ts))), el("span", "i", FEED_ICON[f.kind] ?? "•"), el("span", "x", f.text));
+      row.append(el("span", "t", fmtAge(this.state.age(f.ts))), img(iconURL(feedIcon(f)), "ico"), el("span", "x", f.text));
       fb.append(row);
     }
     if (!feed.length) fb.append(el("div", "muted", "noch nichts"));

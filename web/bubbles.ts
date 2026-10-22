@@ -1,4 +1,4 @@
-// Screen-space speech bubbles and name tags.
+// Screen-space speech bubbles and name tags (measured first, then laid out without overlaps).
 
 import type { Agent } from "../src/types.ts";
 import type { ClientState } from "./state.ts";
@@ -12,23 +12,31 @@ const TEXT_LINGER = 4000;
 export interface BubbleContent {
   icon: IconName;
   text: string;
-  tone: "normal" | "warn" | "error";
+  tone: "normal" | "warn" | "error" | "think";
 }
 
-export function bubbleFor(a: Agent, state: ClientState, selected: boolean): BubbleContent | undefined {
-  if (a.waiting) return { icon: "question", text: "braucht Freigabe", tone: "warn" };
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export function bubbleFor(a: Agent, state: ClientState, focused: boolean): BubbleContent | undefined {
+  if (a.waiting) return { icon: "question", text: "braucht Freigabe / Antwort", tone: "warn" };
   if (a.status === "error") return { icon: "alert", text: "Fehler", tone: "error" };
   const tool = a.tool;
   const toolLive = tool && (tool.state === "running" || tool.state === "pending" || state.age(tool.at) < TOOL_LINGER);
   const snip = a.snippet;
   const snipLive = snip && state.age(snip.at) < TEXT_LINGER;
-  if (a.status === "busy" || a.status === "retry" || selected) {
+  if (a.status === "busy" || a.status === "retry" || focused) {
     if (toolLive && (!snipLive || tool!.at >= snip!.at)) {
-      return { icon: tool!.state === "error" ? "alert" : toolIcon(tool!.name), text: tool!.title || tool!.name, tone: tool!.state === "error" ? "error" : "normal" };
+      const err = tool!.state === "error";
+      return { icon: err ? "alert" : toolIcon(tool!.name), text: tool!.title || tool!.name, tone: err ? "error" : "normal" };
     }
-    if (snipLive) return { icon: snip!.kind === "think" ? "think" : "speech", text: snip!.text, tone: "normal" };
+    if (snipLive) return { icon: snip!.kind === "think" ? "think" : "speech", text: snip!.text, tone: snip!.kind === "think" ? "think" : "normal" };
   }
-  if (selected) {
+  if (focused) {
     if (a.status === "done") return { icon: "check", text: "fertig", tone: "normal" };
     if (a.status === "idle") return { icon: "zzz", text: "wartet auf Input", tone: "normal" };
     if (tool) return { icon: toolIcon(tool.name), text: tool.title || tool.name, tone: "normal" };
@@ -47,52 +55,97 @@ function truncate(g: CanvasRenderingContext2D, text: string, max: number): strin
   return text.slice(0, lo) + "…";
 }
 
-/** Draws a bubble whose tail points at (x, y). Returns its rect for collision nudging. */
-export function drawBubble(g: CanvasRenderingContext2D, x: number, y: number, b: BubbleContent, maxW: number) {
-  const fs = 12;
-  g.font = `${fs}px ${FONT}`;
-  const iconS = 16;
-  const pad = 5;
-  const text = truncate(g, b.text, maxW - iconS - pad * 3);
-  const w = Math.ceil(iconS + pad * 3 + g.measureText(text).width);
-  const h = iconS + pad * 2;
-  const bx = Math.round(Math.max(4, Math.min(g.canvas.width / devicePixelRatio - w - 4, x - w / 2)));
-  const by = Math.round(y - h - 7);
-  const fill = b.tone === "error" ? "#ffe3e3" : b.tone === "warn" ? "#fff3bf" : "#f8f9fa";
+const BUBBLE_FS = 12;
+const ICON_S = 16;
+const PAD = 5;
+const TAIL = 7;
+
+export interface MeasuredBubble {
+  b: BubbleContent;
+  text: string;
+  w: number;
+  h: number;
+}
+
+export function measureBubble(g: CanvasRenderingContext2D, b: BubbleContent, maxW: number): MeasuredBubble {
+  g.font = `${BUBBLE_FS}px ${FONT}`;
+  const text = truncate(g, b.text, maxW - ICON_S - PAD * 3);
+  return { b, text, w: Math.ceil(ICON_S + PAD * 3 + g.measureText(text).width), h: ICON_S + PAD * 2 + TAIL };
+}
+
+const FILL: Record<BubbleContent["tone"], string> = {
+  normal: "#f8f9fa",
+  warn: "#fff3bf",
+  error: "#ffe3e3",
+  think: "#f3f0ff",
+};
+
+/** Draws a bubble at box (x,y = top-left incl. tail space below); tail points at tailX. */
+export function drawBubble(g: CanvasRenderingContext2D, m: MeasuredBubble, x: number, y: number, tailX: number) {
+  const h = m.h - TAIL;
+  const w = m.w;
+  const bx = Math.round(x);
+  const by = Math.round(y);
+  const fill = FILL[m.b.tone];
+  // drop shadow
+  g.globalAlpha = 0.35;
+  g.fillStyle = "#000";
+  g.fillRect(bx, by + 3, w + 2, h);
+  g.globalAlpha = 1;
   g.fillStyle = OUTLINE;
   g.fillRect(bx - 2, by, w + 4, h);
   g.fillRect(bx, by - 2, w, h + 4);
   g.fillStyle = fill;
   g.fillRect(bx, by, w, h);
-  // tail
-  const tx = Math.round(Math.max(bx + 6, Math.min(bx + w - 10, x - 3)));
+  g.fillStyle = "rgba(0,0,0,0.06)";
+  g.fillRect(bx, by + h - 3, w, 3);
+  const tx = Math.round(Math.max(bx + 6, Math.min(bx + w - 10, tailX - 3)));
   g.fillStyle = OUTLINE;
-  g.fillRect(tx - 1, by + h, 8, 3);
-  g.fillRect(tx + 1, by + h + 3, 4, 2);
-  g.fillRect(tx + 2, by + h + 5, 2, 2);
-  g.fillStyle = fill;
-  g.fillRect(tx + 1, by + h, 4, 2);
-  g.fillRect(tx + 2, by + h + 2, 2, 2);
+  if (m.b.tone === "think") {
+    g.fillRect(tx, by + h + 2, 4, 3);
+    g.fillRect(tx + 2, by + h + 6, 2, 2);
+    g.fillStyle = fill;
+    g.fillRect(tx + 1, by + h + 3, 2, 1);
+  } else {
+    g.fillRect(tx - 1, by + h, 8, 3);
+    g.fillRect(tx + 1, by + h + 3, 4, 2);
+    g.fillRect(tx + 2, by + h + 5, 2, 2);
+    g.fillStyle = fill;
+    g.fillRect(tx + 1, by + h, 4, 2);
+    g.fillRect(tx + 2, by + h + 2, 2, 2);
+  }
   g.imageSmoothingEnabled = false;
-  g.drawImage(icon(b.icon), bx + pad, by + pad, iconS, iconS);
+  g.drawImage(icon(m.b.icon), bx + PAD, by + PAD, ICON_S, ICON_S);
+  g.font = `${BUBBLE_FS}px ${FONT}`;
   g.fillStyle = "#1d1a2b";
   g.textBaseline = "middle";
-  g.fillText(text, bx + pad * 2 + iconS, by + h / 2 + 1);
-  return { x: bx, y: by - 2, w, h: h + 4 };
+  g.fillText(m.text, bx + PAD * 2 + ICON_S, by + h / 2 + 1);
 }
 
-export function drawNameTag(g: CanvasRenderingContext2D, x: number, y: number, name: string, color: string) {
+export const TAG_H = 14;
+
+export function measureTag(g: CanvasRenderingContext2D, name: string) {
   g.font = `10px ${FONT}`;
-  const w = Math.ceil(g.measureText(name).width) + 10;
-  const bx = Math.round(x - w / 2);
-  const by = Math.round(y);
-  g.globalAlpha = 0.85;
-  g.fillStyle = "#16121f";
-  g.fillRect(bx, by, w, 13);
-  g.globalAlpha = 1;
-  g.fillStyle = color;
-  g.fillRect(bx + 3, by + 5, 3, 3);
-  g.fillStyle = "#e9e4ff";
-  g.textBaseline = "middle";
-  g.fillText(name, bx + 8, by + 7);
+  return Math.ceil(g.measureText(name).width) + 13;
 }
+
+export function drawNameTag(g: CanvasRenderingContext2D, x: number, y: number, w: number, name: string, color: string, focused: boolean) {
+  const bx = Math.round(x);
+  const by = Math.round(y);
+  g.globalAlpha = 0.9;
+  g.fillStyle = focused ? "#3a2f12" : "#16121f";
+  g.fillRect(bx, by, w, TAG_H);
+  g.globalAlpha = 1;
+  if (focused) {
+    g.fillStyle = "#ffd43b";
+    g.fillRect(bx, by + TAG_H - 1, w, 1);
+  }
+  g.fillStyle = color;
+  g.fillRect(bx + 4, by + 5, 4, 4);
+  g.font = `10px ${FONT}`;
+  g.fillStyle = "#f1ecff";
+  g.textBaseline = "middle";
+  g.fillText(name, bx + 10, by + TAG_H / 2 + 1);
+}
+
+export const overlaps = (a: Box, b: Box) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;

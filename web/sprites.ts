@@ -287,6 +287,137 @@ export function toolIcon(tool: string): IconName {
   return "gear";
 }
 
+// ---------- 3×5 bitmap font (world-space signs, crisp at any zoom) ----------
+
+const GLYPHS: Record<string, string[]> = {
+  0: ["###","#.#","#.#","#.#","###"], 1: [".#.","##.",".#.",".#.","###"], 2: ["##.","..#",".#.","#..","###"],
+  3: ["##.","..#",".#.","..#","##."], 4: ["#.#","#.#","###","..#","..#"], 5: ["###","#..","##.","..#","##."],
+  6: [".##","#..","###","#.#","###"], 7: ["###","..#",".#.",".#.",".#."], 8: ["###","#.#","###","#.#","###"],
+  9: ["###","#.#","###","..#","##."], A: [".#.","#.#","###","#.#","#.#"], B: ["##.","#.#","##.","#.#","##."],
+  C: [".##","#..","#..","#..",".##"], D: ["##.","#.#","#.#","#.#","##."], E: ["###","#..","##.","#..","###"],
+  F: ["###","#..","##.","#..","#.."], G: [".##","#..","#.#","#.#",".##"], H: ["#.#","#.#","###","#.#","#.#"],
+  I: ["###",".#.",".#.",".#.","###"], J: ["..#","..#","..#","#.#",".#."], K: ["#.#","#.#","##.","#.#","#.#"],
+  L: ["#..","#..","#..","#..","###"], M: ["#.#","###","###","#.#","#.#"], N: ["##.","#.#","#.#","#.#","#.#"],
+  O: [".#.","#.#","#.#","#.#",".#."], P: ["##.","#.#","##.","#..","#.."], Q: [".#.","#.#","#.#","##.",".##"],
+  R: ["##.","#.#","##.","#.#","#.#"], S: [".##","#..",".#.","..#","##."], T: ["###",".#.",".#.",".#.",".#."],
+  U: ["#.#","#.#","#.#","#.#","###"], V: ["#.#","#.#","#.#","#.#",".#."], W: ["#.#","#.#","###","###","#.#"],
+  X: ["#.#","#.#",".#.","#.#","#.#"], Y: ["#.#","#.#",".#.",".#.",".#."], Z: ["###","..#",".#.","#..","###"],
+  "Ä": ["#.#",".#.","#.#","###","#.#"], "Ö": ["#.#",".#.","#.#","#.#",".#."], "Ü": ["#.#","...","#.#","#.#","###"],
+  " ": ["...","...","...","...","..."], ".": ["...","...","...","...",".#."], ":": ["...",".#.","...",".#.","..."],
+  "/": ["..#","..#",".#.","#..","#.."], "-": ["...","...","###","...","..."], "%": ["#.#","..#",".#.","#..","#.#"],
+  "+": ["...",".#.","###",".#.","..."], "·": ["...","...",".#.","...","..."], "?": ["##.","..#",".#.","...",".#."],
+  "!": [".#.",".#.",".#.","...",".#."],
+};
+
+function glyph(ch: string): string {
+  return (GLYPHS[ch] ?? GLYPHS[ch.toUpperCase()] ?? GLYPHS["?"]).join("");
+}
+
+export const FONT_H = 5;
+export const textWidth = (text: string) => Math.max(0, text.length * 4 - 1);
+
+export function pixelText(g: CanvasRenderingContext2D, text: string, x: number, y: number, color: string, shadow?: string) {
+  const draw = (ox: number, oy: number, col: string) => {
+    g.fillStyle = col;
+    let cx = Math.round(x) + ox;
+    for (const ch of text) {
+      const bits = glyph(ch);
+      for (let i = 0; i < 15; i++) if (bits[i] === "#") g.fillRect(cx + (i % 3), Math.round(y) + oy + ((i / 3) | 0), 1, 1);
+      cx += 4;
+    }
+  };
+  if (shadow) draw(0, 1, shadow);
+  draw(0, 0, color);
+}
+
+// ---------- avatars for the DOM panel ----------
+
+const avatarCache = new Map<string, string>();
+
+export function avatarURL(look: Look): string {
+  const key = `${look.skin}|${look.hair}|${look.shirt}|${look.acc}|${look.accColor}`;
+  const hit = avatarCache.get(key);
+  if (hit) return hit;
+  const src = charSprite(look, "down", 0);
+  const [c, ctx] = makeCanvas(CHAR_W * 3, 15 * 3);
+  ctx.drawImage(src, 0, 0, CHAR_W, 15, 0, 0, CHAR_W * 3, 15 * 3);
+  const url = c.toDataURL();
+  avatarCache.set(key, url);
+  return url;
+}
+
+export function iconURL(name: IconName): string {
+  const key = "u|" + name;
+  const hit = avatarCache.get(key);
+  if (hit) return hit;
+  const [c, ctx] = makeCanvas(16, 16);
+  ctx.drawImage(icon(name), 0, 0, 16, 16);
+  const url = c.toDataURL();
+  avatarCache.set(key, url);
+  return url;
+}
+
+// ---------- office cat ----------
+
+export type CatPose = "walk0" | "walk1" | "sit" | "sleep";
+
+export function catSprite(pose: CatPose, flip: boolean): HTMLCanvasElement {
+  const key = `cat|${pose}|${flip}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  if (flip) {
+    const c = mirror(catSprite(pose, false));
+    cache.set(key, c);
+    return c;
+  }
+  const [c, ctx] = makeCanvas(14, 11);
+  const r = (x: number, y: number, w: number, h: number, col: string) => rect(ctx, x, y, w, h, col);
+  const fur = "#f08c3c";
+  const dark = "#c4632a";
+  const light = "#ffd8a8";
+  if (pose === "sleep") {
+    r(2, 5, 10, 4, fur);
+    r(3, 4, 7, 1, fur);
+    r(2, 8, 10, 1, dark);
+    r(9, 4, 3, 3, fur); // head tucked in
+    r(9, 4, 1, 1, dark);
+    r(11, 4, 1, 1, dark);
+    r(1, 7, 3, 2, dark); // tail wrapped
+    r(5, 6, 3, 1, dark);
+  } else if (pose === "sit") {
+    r(4, 4, 5, 6, fur);
+    r(5, 6, 3, 3, light);
+    r(3, 1, 6, 4, fur); // head
+    r(3, 0, 1, 1, fur);
+    r(8, 0, 1, 1, fur);
+    r(4, 2, 1, 1, "#2b2233");
+    r(7, 2, 1, 1, "#2b2233");
+    r(9, 7, 3, 2, fur); // tail
+    r(11, 5, 1, 2, fur);
+    r(4, 9, 2, 1, dark);
+    r(7, 9, 2, 1, dark);
+  } else {
+    const step = pose === "walk1";
+    r(3, 4, 8, 4, fur);
+    r(4, 5, 2, 1, dark);
+    r(7, 5, 2, 1, dark);
+    r(0, 1, 5, 4, fur); // head (facing left)
+    r(0, 0, 1, 1, fur);
+    r(3, 0, 1, 1, fur);
+    r(1, 2, 1, 1, "#2b2233");
+    r(1, 4, 2, 1, light);
+    r(11, 2, 1, 3, fur); // tail up
+    r(12, 1, 1, 2, fur);
+    r(step ? 3 : 4, 8, 1, 2, dark);
+    r(step ? 6 : 5, 8, 1, 2, fur);
+    r(step ? 8 : 9, 8, 1, 2, dark);
+    r(step ? 10 : 9, 8, 1, 2, fur);
+  }
+  outline(c);
+  cache.set(key, c);
+  return c;
+}
+
 export function paperPlane(): HTMLCanvasElement {
   const key = "plane";
   const hit = cache.get(key);

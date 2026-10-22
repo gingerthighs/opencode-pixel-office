@@ -3,7 +3,7 @@
 import type { Agent } from "../src/types.ts";
 import type { Office, Seat, Spot, Tile } from "./office.ts";
 import { lookOf, roleOf, type Look } from "./roles.ts";
-import { CHAR_FEET, charSprite, rect, T, type Pose } from "./sprites.ts";
+import { CHAR_FEET, catSprite, charSprite, rect, T, type CatPose, type Pose } from "./sprites.ts";
 
 const SPEED = 46; // px per second
 const IDLE_TO_LOUNGE = 6; // seconds a root agent idles before strolling to the lounge
@@ -25,6 +25,8 @@ export class Char {
   gone = false;
   private path: { x: number; y: number }[] = [];
   private walkT = 0;
+  /** per-character animation offset so not everyone breathes/blinks in sync */
+  private phase = Math.random() * 10;
   private idleSince = 0;
   private lastStatus = "";
 
@@ -169,6 +171,9 @@ export class Char {
       const cycle = [1, 0, 2, 0];
       const frame = walking ? cycle[Math.floor(this.walkT * 8) % 4] : 0;
       sprite = charSprite(this.look, this.dir, frame, false);
+      // breathing while standing, a step bounce while walking
+      if (!walking) dy = Math.floor(t * 1.2 + this.phase) % 2;
+      else dy = frame === 0 ? 0 : -1;
     }
     const x = Math.round(this.x) - 8;
     const y = Math.round(this.y) - CHAR_FEET + dy;
@@ -184,6 +189,14 @@ export class Char {
       rect(g, x + 2 - pulse, Math.round(this.y) + 2, 12 + pulse * 2, 1, "#ffd43b");
     }
     g.drawImage(sprite, x, y);
+    // blink: brief eyelids when facing the viewer
+    const facingViewer = (!this.sitting && this.dir === "down" && !walking) || (this.sitting && this.goal === "lounge");
+    if (facingViewer && (t + this.phase * 3) % 4.2 < 0.13) {
+      rect(g, x + 6, y + 9, 1, 2, this.look.skin);
+      rect(g, x + 9, y + 9, 1, 2, this.look.skin);
+      rect(g, x + 6, y + 10, 1, 1, "#1d1a2b");
+      rect(g, x + 9, y + 10, 1, 1, "#1d1a2b");
+    }
     if (this.sitting && this.goal === "seat" && this.seat) office.chairBack(g, this.seat.px, this.seat.py);
     // status marks above head
     if (agent?.status === "retry") rect(g, x + 13, y + 5 + (Math.floor(t * 3) % 2), 2, 3, "#74c0fc");
@@ -198,5 +211,83 @@ export class Char {
 
   hit(wx: number, wy: number) {
     return wx >= this.x - 7 && wx <= this.x + 7 && wy >= this.y - CHAR_FEET + 3 && wy <= this.y + 2;
+  }
+}
+
+/** The office cat: wanders between free tiles, sits, and naps on the sofa when it's free. */
+export class Cat {
+  x: number;
+  y: number;
+  private flip = false;
+  private path: { x: number; y: number }[] = [];
+  private mode: "walk" | "sit" | "sleep" = "sit";
+  private until = 0;
+  private walkT = 0;
+
+  constructor(office: Office) {
+    const t = office.randomFreeTile();
+    this.x = t.tx * T + 8;
+    this.y = t.ty * T + 12;
+    this.until = performance.now() + 3000;
+  }
+
+  update(dt: number, office: Office, now: number) {
+    if (this.path.length) {
+      this.walkT += dt;
+      let budget = 22 * dt;
+      while (budget > 0 && this.path.length) {
+        const p = this.path[0];
+        const dx = p.x - this.x;
+        const dy = p.y - this.y;
+        const dist = Math.hypot(dx, dy);
+        if (Math.abs(dx) > 0.1) this.flip = dx > 0;
+        if (dist <= budget) {
+          this.x = p.x;
+          this.y = p.y;
+          budget -= dist;
+          this.path.shift();
+        } else {
+          this.x += (dx / dist) * budget;
+          this.y += (dy / dist) * budget;
+          budget = 0;
+        }
+      }
+      if (!this.path.length) {
+        this.mode = this.mode === "sleep" ? "sleep" : "sit";
+        this.until = now + (this.mode === "sleep" ? 25_000 : 4000 + Math.random() * 8000);
+      }
+      return;
+    }
+    if (now < this.until) return;
+    // pick the next destination: sometimes a nap on a free sofa seat
+    const sofa = office.spots.find((s) => s.sit && !office.isSpotTaken(s.id));
+    let target: Tile;
+    if (sofa && Math.random() < 0.3) {
+      target = sofa;
+      this.mode = "sleep";
+    } else {
+      target = office.randomFreeTile();
+      this.mode = "walk";
+    }
+    this.path = office.path({ tx: Math.floor(this.x / T), ty: Math.floor(this.y / T) }, target).map((t) => ({ x: t.tx * T + 8, y: t.ty * T + 12 }));
+    if (this.mode === "sleep") this.path.push({ x: target.tx * T + 8, y: target.ty * T + 9 });
+  }
+
+  draw(g: CanvasRenderingContext2D, t: number) {
+    const walking = this.path.length > 0;
+    const pose: CatPose = walking ? (Math.floor(this.walkT * 6) % 2 ? "walk1" : "walk0") : this.mode === "sleep" ? "sleep" : "sit";
+    const x = Math.round(this.x) - 7;
+    const y = Math.round(this.y) - 10;
+    g.globalAlpha = 0.3;
+    rect(g, x + 3, Math.round(this.y), 8, 1, "#000");
+    g.globalAlpha = 1;
+    g.drawImage(catSprite(pose, this.flip), x, y);
+    if (pose === "sleep") {
+      const k = (t * 0.5) % 1;
+      g.globalAlpha = 1 - k;
+      rect(g, x + 11 + Math.round(k * 3), y - 1 - Math.round(k * 5), 2, 1, "#e9ecef");
+      rect(g, x + 12 + Math.round(k * 3), y - Math.round(k * 5), 1, 1, "#e9ecef");
+      g.globalAlpha = 1;
+    }
   }
 }
