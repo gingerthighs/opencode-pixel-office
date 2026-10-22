@@ -5,7 +5,7 @@ import type { Zone } from "./roles.ts";
 import { FONT_H, makeCanvas, pixelText, rect, shade, T, textWidth, type Pose } from "./sprites.ts";
 
 export const W = 32;
-export const H = 20;
+export const H = 24;
 
 export interface Tile {
   tx: number;
@@ -22,8 +22,11 @@ export interface Seat extends Tile {
   mon?: { x: number; y: number; w: number };
 }
 
+export type SpotKind = "coffee" | "sofa" | "beanbag" | "arcade" | "pingpong" | "cat-tree" | "cat-bed" | "cat-food";
+
 export interface Spot extends Tile {
   id: string;
+  kind: SpotKind;
   px: number;
   py: number;
   sit: boolean;
@@ -36,10 +39,27 @@ export interface SeatState {
   status: AgentStatus;
   waiting: boolean;
   tool?: string;
+  /** off-duty staff surfing the web at their desk */
+  browsing?: boolean;
+}
+
+export interface DeskPapers {
+  /** an assignment sheet lies on the desk */
+  task: boolean;
+  /** finished pages (one per edit), capped when drawn */
+  stack: number;
 }
 
 export interface Dyn {
   seats: Map<string, SeatState>;
+  desks: Map<string, DeskPapers>;
+  /** finished reports in the boss inbox / open assignments in the outbox */
+  inbox: number;
+  outbox: number;
+  tvWatchers: number;
+  arcade: boolean;
+  pingpong: boolean;
+  ballT: number;
   todos: Todo[];
   bash: boolean;
   oracleBusy: boolean;
@@ -58,7 +78,7 @@ export interface Light {
 }
 
 interface ZoneDef {
-  zone: Zone | "lounge";
+  zone: Zone | "lounge" | "cat" | "games";
   label: string;
   x: number;
   y: number;
@@ -76,7 +96,9 @@ export const ZONES: ZoneDef[] = [
   { zone: "open", label: "GROSSRAUM", x: 10, y: 8, w: 11, h: 6, sign: { x: 248, y: 226 } },
   { zone: "studio", label: "STUDIO", x: 1, y: 10, w: 8, h: 8, color: "#285866", sign: { x: 80, y: 165 } },
   { zone: "workbench", label: "WERKSTATT", x: 23, y: 10, w: 8, h: 8, color: "#5a4b3c", sign: { x: 432, y: 165 } },
-  { zone: "lounge", label: "LOUNGE", x: 13, y: 15, w: 8, h: 4, color: "#3b4561", sign: { x: 272, y: 290 } },
+  { zone: "lounge", label: "LOUNGE", x: 10, y: 15, w: 12, h: 8, color: "#3b4561", sign: { x: 256, y: 355 } },
+  { zone: "cat", label: "KATZENECKE", x: 1, y: 19, w: 6, h: 4, color: "#5a3550", sign: { x: 64, y: 291 } },
+  { zone: "games", label: "SPIELECKE", x: 23, y: 19, w: 8, h: 4, color: "#2e4d3c", sign: { x: 432, y: 291 } },
 ];
 
 const WALL_TOP = "#231f33";
@@ -108,7 +130,11 @@ export class Office {
   readonly bg: HTMLCanvasElement;
   readonly seats: Seat[] = [];
   readonly spots: Spot[] = [];
-  readonly door: Tile = { tx: 15, ty: 19 };
+  readonly door: Tile = { tx: 15, ty: H - 1 };
+  /** where workers fetch assignments (outbox, right of the boss desk) and drop reports (inbox, left) */
+  readonly pickup: (Tile & { face: Pose })[] = [{ tx: 6, ty: 4, face: "left" }, { tx: 6, ty: 5, face: "up" }, { tx: 7, ty: 4, face: "left" }];
+  readonly dropoff: (Tile & { face: Pose })[] = [{ tx: 2, ty: 4, face: "right" }, { tx: 2, ty: 5, face: "up" }, { tx: 2, ty: 3, face: "down" }];
+  readonly lounge = { x: 10, y: 15, w: 12, h: 8 };
   private blocked = new Uint8Array(W * H);
   private seatOwner = new Map<string, string>();
   private spotOwner = new Map<string, string>();
@@ -153,7 +179,12 @@ export class Office {
       sortY: row * T + 13,
       draw: (g, t, dyn) => {
         g.drawImage(layer.c, 0, layer.y0);
-        for (const s of this.seats) if (s.mon && s.ty - 1 === row) this.monitor(g, s, dyn.seats.get(s.id), t);
+        for (const s of this.seats) {
+          if (!s.mon || s.ty - 1 !== row) continue;
+          this.monitor(g, s, dyn.seats.get(s.id), t);
+          const papers = dyn.desks.get(s.id);
+          if (papers) this.deskPapers(g, s, papers);
+        }
         this.rowDynamic(row, g, t, dyn);
       },
     }));
@@ -195,6 +226,26 @@ export class Office {
 
   isSpotTaken(id: string) {
     return this.spotOwner.has(id);
+  }
+
+  spotOwnerOf(id: string) {
+    return this.spotOwner.get(id);
+  }
+
+  /** claim a free spot of a kind (or a specific spot id); undefined when all are taken */
+  claimSpotKind(kind: SpotKind, owner: string, id?: string): Spot | undefined {
+    this.releaseSpot(owner);
+    const pick = this.spots.find((s) => s.kind === kind && (!id || s.id === id) && !this.spotOwner.has(s.id));
+    if (pick) this.spotOwner.set(pick.id, owner);
+    return pick;
+  }
+
+  randomFreeTileIn(r: { x: number; y: number; w: number; h: number }): Tile {
+    for (let i = 0; i < 100; i++) {
+      const t = { tx: r.x + Math.floor(Math.random() * r.w), ty: r.y + Math.floor(Math.random() * r.h) };
+      if (!this.isBlocked(t.tx, t.ty) && !this.spots.some((s) => s.tx === t.tx && s.ty === t.ty)) return t;
+    }
+    return this.randomFreeTile();
   }
 
   // ---------- pathing ----------
@@ -326,23 +377,42 @@ export class Office {
     this.onRow(14, () => this.toolCabinet(30, 13));
     this.onRow(17, () => this.crates(23, 17));
 
-    // lounge
+    // lounge: kitchenette, TV wall, sofa facing the TV, beanbags, arcade
     this.onRow(15, () => this.counter(10, 15, 3));
     this.onRow(15, () => this.cooler(13, 15));
-    this.sofa(17, 17, 3);
-    this.sideTable(256, 272);
-    this.block(16, 17); // side table
-    this.onRow(18, () => this.plant(10, 18, 2));
-    this.onRow(18, () => this.plant(21, 18));
+    this.onRow(17, () => this.tvStand(15, 17));
+    this.onRow(16, () => this.arcade(21, 16));
+    this.sofaUp(14, 20, 5);
+    this.beanbag(12, 19, "#e8590c");
+    this.beanbag(20, 19, "#7048e8");
+    this.onRow(22, () => this.plant(10, 22, 2));
+    this.onRow(22, () => this.plant(21, 22));
     this.onRow(18, () => this.plant(1, 18, 1));
     this.onRow(18, () => this.plant(30, 18, 2));
-    for (const [x, y] of [[11, 16], [12, 16], [14, 16]] as const) {
-      this.spots.push({ id: `s${x},${y}`, tx: x, ty: y, px: x * T + 8, py: y * T + 12, sit: false, face: "up" });
-    }
-    // sofa seats are blocked tiles: people (and the cat) step onto them only from the front row
-    for (const x of [17, 18, 19]) {
-      this.spots.push({ id: `sofa${x}`, tx: x, ty: 17, px: x * T + 8, py: 17 * T + 11, sit: true, face: "down", via: { tx: x, ty: 18 } });
-    }
+    const spot = (kind: SpotKind, tx: number, ty: number, face: Pose, sit: boolean, px = tx * T + 8, py = ty * T + 12, via?: Tile) =>
+      this.spots.push({ id: `${kind}${tx},${ty}`, kind, tx, ty, px, py, sit, face, via });
+    for (const [x, y] of [[11, 16], [12, 16], [14, 16]] as const) spot("coffee", x, y, "up", false);
+    // sofa seats are blocked tiles: people step on and off from the row in front (towards the TV)
+    for (let x = 14; x <= 18; x++) spot("sofa", x, 20, "up", true, x * T + 8, 20 * T + 9, { tx: x, ty: 19 });
+    spot("beanbag", 12, 19, "up", true, 12 * T + 8, 19 * T + 10, { tx: 12, ty: 20 });
+    spot("beanbag", 20, 19, "up", true, 20 * T + 8, 19 * T + 10, { tx: 20, ty: 20 });
+    spot("arcade", 21, 17, "up", false);
+
+    // cat corner
+    this.onRow(20, () => this.catTree(1, 19));
+    this.catBed(4, 22);
+    this.bowls(6, 21);
+    this.yarn(3, 22);
+    spot("cat-tree", 2, 19, "down", true, 2 * T + 1, 19 * T + 1, { tx: 3, ty: 20 });
+    spot("cat-bed", 4, 22, "down", true, 4 * T + 8, 22 * T + 10);
+    spot("cat-food", 5, 21, "right", false, 5 * T + 10, 21 * T + 12);
+
+    // games corner
+    this.onRow(20, () => this.pingpongTable(25, 20));
+    this.onRow(22, () => this.plant(30, 22, 1));
+    this.onRow(22, () => this.crates(23, 22));
+    spot("pingpong", 24, 20, "right", false, 24 * T + 10, 20 * T + 12);
+    spot("pingpong", 28, 20, "left", false, 28 * T + 6, 20 * T + 12);
 
     const [sc, sg] = makeCanvas(W * T, H * T);
     this.signLayer = sc;
@@ -710,31 +780,125 @@ export class Office {
     this.block(tx, ty);
   }
 
-  private sofa(tx: number, ty: number, w: number) {
+  private tvStand(tx: number, ty: number) {
     const x = tx * T;
     const y = ty * T;
-    this.shadow(x - 4, y - 6, w * T + 8, 20);
-    this.r(x - 2, y - 6, w * T + 4, 8, "#364fc7");
-    this.r(x - 2, y - 6, w * T + 4, 2, "#4c6ef5");
-    this.r(x - 4, y - 4, 4, 18, "#364fc7");
-    this.r(x + w * T, y - 4, 4, 18, "#364fc7");
-    this.r(x, y + 2, w * T, 12, "#4263eb");
-    this.block(tx, ty, w, 1);
-    for (let i = 1; i < w; i++) this.r(x + i * T, y + 2, 1, 12, "#364fc7");
-    // cushions
-    this.r(x + 2, y - 3, 6, 4, "#ffd43b");
-    this.r(x + w * T - 8, y - 3, 6, 4, "#ff8787");
+    this.shadow(x + 1, y + 2, 3 * T - 2, 12);
+    this.r(x + 1, y + 2, 3 * T - 2, 12, "#3b2a20");
+    this.r(x + 2, y + 3, 3 * T - 4, 2, "#5c3b24");
+    this.r(x + 6, y + 7, 10, 5, "#2b1d14");
+    this.r(x + 3 * T - 16, y + 7, 10, 5, "#2b1d14");
+    this.r(x + 20, y + 8, 8, 3, "#40c057"); // console light
+    // the TV itself: screen faces the sofa (and us)
+    this.r(x + 4, y - 20, 3 * T - 8, 23, "#14121c");
+    this.r(x + 22, y + 2, 4, 2, "#14121c");
+    this.tvScreen = { x: x + 6, y: y - 18, w: 3 * T - 12, h: 19 };
+    this.block(tx, ty, 3, 1);
   }
 
-  /** small side table with a reading lamp, left of the sofa (decor only, not blocking) */
-  private sideTable(x: number, y: number) {
-    this.shadow(x, y, 10, 9);
-    this.r(x, y, 10, 9, "#5c3b24");
-    this.r(x + 1, y + 1, 8, 5, "#7a5236");
-    this.r(x + 4, y - 5, 2, 6, "#495057");
-    this.r(x + 2, y - 8, 6, 3, "#ffd43b");
-    this.r(x + 6, y + 2, 2, 2, "#f8f9fa");
+  private arcade(tx: number, ty: number) {
+    const x = tx * T + 1;
+    const y = ty * T - 12;
+    this.shadow(x, y, 14, 26);
+    this.r(x, y, 14, 26, "#5f3dc4");
+    this.r(x + 1, y + 1, 12, 3, "#ff6b6b");
+    this.r(x + 2, y + 5, 10, 9, "#14121c");
+    this.r(x, y + 15, 14, 3, "#7048e8");
+    this.r(x + 4, y + 14, 1, 2, "#212529");
+    this.r(x + 3, y + 13, 3, 1, "#e03131");
+    this.r(x + 8, y + 15, 2, 1, "#fcc419");
+    this.r(x + 11, y + 15, 2, 1, "#40c057");
+    this.arcadeScreen = { x: x + 3, y: y + 6, w: 8, h: 7 };
+    this.block(tx, ty);
   }
+
+  /** sofa seen from behind: cushions on the floor layer, backrest in front of the sitters */
+  private sofaUp(tx: number, ty: number, w: number) {
+    const x = tx * T;
+    const y = ty * T;
+    rect(this.base, x - 3, y - 2, w * T + 6, 14, "#364fc7");
+    rect(this.base, x, y - 1, w * T, 9, "#4263eb");
+    for (let i = 1; i < w; i++) rect(this.base, x + i * T, y - 1, 1, 9, "#364fc7");
+    this.onRow(ty, () => {
+      this.shadow(x - 4, y + 8, w * T + 8, 8);
+      this.r(x - 4, y - 3, 4, 18, "#2b3fa8");
+      this.r(x + w * T, y - 3, 4, 18, "#2b3fa8");
+      this.r(x - 2, y + 8, w * T + 4, 8, "#364fc7");
+      this.r(x - 2, y + 8, w * T + 4, 2, "#4c6ef5");
+      this.r(x + 6, y + 11, 6, 3, "#ffd43b"); // cushions peeking out
+      this.r(x + w * T - 12, y + 11, 6, 3, "#ff8787");
+    });
+    this.block(tx, ty, w, 1);
+  }
+
+  private beanbag(tx: number, ty: number, color: string) {
+    const x = tx * T;
+    const y = ty * T;
+    rect(this.base, x + 1, y + 4, 14, 11, shade(color, -0.3));
+    rect(this.base, x + 2, y + 3, 12, 11, color);
+    rect(this.base, x + 4, y + 4, 5, 2, shade(color, 0.3));
+    this.block(tx, ty);
+  }
+
+  private catTree(tx: number, ty: number) {
+    const x = tx * T;
+    const y = ty * T;
+    this.shadow(x + 1, y + 26, 30, 6);
+    this.r(x + 1, y + 26, 30, 6, "#a9743d"); // base
+    this.r(x + 1, y + 26, 30, 1, "#c08a4f");
+    this.r(x + 14, y + 4, 5, 22, "#d9c39a"); // sisal post
+    for (let i = 0; i < 11; i++) this.r(x + 14, y + 5 + i * 2, 5, 1, "#b89a6a");
+    this.r(x + 3, y + 1, 26, 4, "#a9743d"); // top platform
+    this.r(x + 3, y + 1, 26, 1, "#d6a66e");
+    this.r(x + 19, y + 14, 11, 3, "#a9743d"); // side step
+    this.r(x + 24, y + 17, 1, 6, "#ff6b6b"); // dangling toy
+    this.r(x + 23, y + 23, 3, 3, "#ff6b6b");
+    this.block(tx, ty, 2, 2);
+  }
+
+  private catBed(tx: number, ty: number) {
+    const x = tx * T;
+    const y = ty * T;
+    rect(this.base, x + 1, y + 4, 14, 10, "#c2255c");
+    rect(this.base, x + 3, y + 6, 10, 6, "#f783ac");
+  }
+
+  private bowls(tx: number, ty: number) {
+    const x = tx * T;
+    const y = ty * T;
+    rect(this.base, x + 3, y + 8, 9, 5, "#e8590c");
+    rect(this.base, x + 4, y + 8, 7, 2, "#8d5524");
+    rect(this.base, x + 5, y + 8, 1, 1, "#c08a4f");
+    rect(this.base, x + 3, y + 18, 9, 5, "#1c7ed6");
+    rect(this.base, x + 4, y + 18, 7, 2, "#a5d8ff");
+  }
+
+  private yarn(tx: number, ty: number) {
+    const x = tx * T;
+    const y = ty * T;
+    rect(this.base, x + 4, y + 7, 6, 6, "#e64980");
+    rect(this.base, x + 5, y + 8, 2, 1, "#faa2c1");
+    rect(this.base, x + 10, y + 11, 4, 1, "#e64980");
+  }
+
+  private pingpongTable(tx: number, ty: number) {
+    const x = tx * T;
+    const y = ty * T;
+    this.shadow(x, y - 2, 3 * T, 15);
+    this.r(x, y - 2, 3 * T, 13, "#1e6b4a");
+    this.r(x + 1, y - 1, 3 * T - 2, 11, "#2b8a3e");
+    this.r(x + 1, y + 4, 3 * T - 2, 1, "#e9ecef");
+    this.r(x + 1, y - 1, 3 * T - 2, 1, "#e9ecef");
+    this.r(x + 1, y + 9, 3 * T - 2, 1, "#e9ecef");
+    this.r(x + 24, y - 4, 1, 15, "#f8f9fa"); // net
+    this.r(x + 23, y - 4, 3, 1, "#495057");
+    this.r(x + 2, y + 11, 2, 3, "#343a40");
+    this.r(x + 3 * T - 4, y + 11, 2, 3, "#343a40");
+    this.block(tx, ty, 3, 1);
+  }
+
+  tvScreen = { x: 0, y: 0, w: 0, h: 0 };
+  arcadeScreen = { x: 0, y: 0, w: 0, h: 0 };
 
   /** Desk of width `w` tiles at (dx,dy) with a chair below it, facing up. */
   private addDesk(zone: Zone, kind: Seat["kind"], dx: number, dy: number, w = 2) {
@@ -764,11 +928,8 @@ export class Office {
       this.r(x + w * T - 6, y + 3, 1, 6, "#fab005");
       this.r(x + w * T - 4, y + 4, 1, 5, "#e03131");
     } else if (kind === "boss") {
-      this.r(x + 3, y + 4, 8, 4, "#f1f3f5");
-      this.r(x + 4, y + 5, 6, 1, "#adb5bd");
-      this.r(x + w * T - 10, y + 3, 7, 3, "#fcc419"); // nameplate
-      this.r(x + w * T - 9, y + 4, 5, 1, "#1d1a2b");
-      this.r(x + w * T - 14, y + 7, 3, 3, "#f8f9fa");
+      this.r(x + 13, y + 3, 7, 3, "#fcc419"); // nameplate (trays left/right are drawn live)
+      this.r(x + 14, y + 4, 5, 1, "#1d1a2b");
     } else {
       this.r(x + 2, y + 5, 3, 3, (dx + dy) % 2 ? "#f8f9fa" : "#ffa94d");
       this.r(x + 3, y + 4, 1, 1, "#e9ecef");
@@ -808,8 +969,121 @@ export class Office {
   /** animated details that sit on a furniture row, drawn right after that row layer */
   private rowDynamic(row: number, g: CanvasRenderingContext2D, t: number, dyn: Dyn) {
     if (row === 3) this.rackLeds(g, t, dyn);
-    if (row === 4) this.crystalBall(g, t, dyn);
+    if (row === 4) {
+      this.crystalBall(g, t, dyn);
+      this.trays(g, dyn);
+    }
     if (row === 15) this.loungeFx(g, t, dyn);
+    if (row === 16) this.arcadeFx(g, t, dyn);
+    if (row === 17) this.tvFx(g, t, dyn);
+    if (row === 20 && dyn.pingpong) this.pingpongBall(g, dyn.ballT);
+  }
+
+  private sheet(g: CanvasRenderingContext2D, x: number, y: number, color = "#f8f9fa") {
+    rect(g, x, y, 6, 4, OUT);
+    rect(g, x, y, 6, 3, color);
+    rect(g, x + 1, y + 1, 3, 1, "#adb5bd");
+  }
+
+  /** boss desk: inbox (finished reports, left) and outbox (open assignments, right) */
+  private trays(g: CanvasRenderingContext2D, dyn: Dyn) {
+    const deskY = 4 * T;
+    for (const [tx, n, label] of [[3 * T + 1, dyn.inbox, "#40c057"], [5 * T + 5, dyn.outbox, "#fab005"]] as const) {
+      rect(g, tx, deskY + 4, 10, 7, "#495057");
+      rect(g, tx + 1, deskY + 5, 8, 5, "#343a40");
+      rect(g, tx, deskY + 10, 10, 1, label);
+      const k = Math.min(8, n);
+      for (let i = 0; i < k; i++) this.sheet(g, tx + 2, deskY + 6 - i, i % 2 ? "#f1f3f5" : "#ffffff");
+      if (n > 8) pixelText(g, String(Math.min(99, n)), tx + 1, deskY - 6 - k + 8, "#fff3bf", OUT);
+    }
+  }
+
+  /** assignment sheet + growing stack of finished pages on a worker desk */
+  private deskPapers(g: CanvasRenderingContext2D, s: Seat, p: DeskPapers) {
+    const m = s.mon!;
+    const deskY = m.y + 1;
+    const right = m.x + (s.kind === "boss" ? 14 : 8);
+    const k = Math.min(10, p.stack);
+    for (let i = 0; i < k; i++) this.sheet(g, right, deskY + 7 - i, i % 3 === 2 ? "#e7f5ff" : "#ffffff");
+    if (p.task) {
+      const lx = m.x - (s.kind === "boss" ? 20 : 15);
+      rect(g, lx, deskY + 3, 7, 8, OUT);
+      rect(g, lx, deskY + 3, 7, 7, "#fff3bf");
+      rect(g, lx + 1, deskY + 4, 4, 1, "#e03131");
+      rect(g, lx + 1, deskY + 6, 5, 1, "#adb5bd");
+      rect(g, lx + 1, deskY + 8, 3, 1, "#adb5bd");
+    }
+  }
+
+  private tvFx(g: CanvasRenderingContext2D, t: number, dyn: Dyn) {
+    const sc = this.tvScreen;
+    const show = Math.floor(t / 12) % 3;
+    if (show === 0) {
+      // cartoon: sky, hills and a bouncing ball
+      rect(g, sc.x, sc.y, sc.w, sc.h, "#74c0fc");
+      rect(g, sc.x, sc.y + sc.h - 6, sc.w, 6, "#40c057");
+      rect(g, sc.x + 5, sc.y + sc.h - 9, 10, 3, "#2f9e44");
+      const bx = sc.x + 2 + Math.round(((Math.sin(t * 1.3) + 1) / 2) * (sc.w - 6));
+      const by = sc.y + sc.h - 9 - Math.round(Math.abs(Math.sin(t * 4)) * 8);
+      rect(g, bx, by, 3, 3, "#e03131");
+      rect(g, sc.x + sc.w - 7, sc.y + 2, 4, 4, "#ffe066");
+    } else if (show === 1) {
+      // cat video
+      rect(g, sc.x, sc.y, sc.w, sc.h, "#ffe8cc");
+      rect(g, sc.x, sc.y + sc.h - 4, sc.w, 4, "#d9a066");
+      const cx = sc.x + 12 + Math.round(Math.sin(t * 0.8) * 6);
+      rect(g, cx, sc.y + 7, 9, 6, "#f08c3c");
+      rect(g, cx - 3, sc.y + 4, 5, 5, "#f08c3c");
+      rect(g, cx - 3, sc.y + 3, 1, 1, "#f08c3c");
+      rect(g, cx, sc.y + 3, 1, 1, "#f08c3c");
+      rect(g, cx - 2, sc.y + 6, 1, 1, OUT);
+      rect(g, cx + 9, sc.y + 5 - (Math.floor(t * 3) % 2), 1, 4, "#f08c3c");
+    } else {
+      // office news ticker
+      rect(g, sc.x, sc.y, sc.w, sc.h, "#1c2541");
+      rect(g, sc.x, sc.y, sc.w, 5, "#c92a2a");
+      pixelText(g, "NEWS", sc.x + 1, sc.y, "#fff");
+      pixelText(g, `${dyn.active} AKTIV`, sc.x + 2, sc.y + 7, "#ffd43b");
+      const msg = `+++ ${dyn.inbox} BERICHTE FERTIG +++ ${dyn.outbox} OFFEN +++`;
+      const off = Math.floor(t * 12) % (msg.length * 4 + sc.w);
+      g.save();
+      g.beginPath();
+      g.rect(sc.x, sc.y + 13, sc.w, 6);
+      g.clip();
+      pixelText(g, msg, sc.x + sc.w - off, sc.y + 13, "#e9ecef");
+      g.restore();
+    }
+    if (dyn.tvWatchers === 0) {
+      g.globalAlpha = 0.35;
+      rect(g, sc.x, sc.y, sc.w, sc.h, "#000");
+      g.globalAlpha = 1;
+    }
+    g.globalAlpha = 0.1;
+    rect(g, sc.x, sc.y + (Math.floor(t * 10) % sc.h), sc.w, 1, "#fff");
+    g.globalAlpha = 1;
+  }
+
+  private arcadeFx(g: CanvasRenderingContext2D, t: number, dyn: Dyn) {
+    const sc = this.arcadeScreen;
+    rect(g, sc.x, sc.y, sc.w, sc.h, "#0b0b1a");
+    if (dyn.arcade) {
+      const k = Math.floor(t * 6);
+      rect(g, sc.x + (k % 6), sc.y + 5, 2, 1, "#69db7c");
+      rect(g, sc.x + ((k * 3) % 7), sc.y + 1 + ((k >> 1) % 3), 1, 1, "#ff6b6b");
+      rect(g, sc.x + 5 - (k % 5), sc.y + 2, 1, 1, "#ffd43b");
+    } else if (Math.floor(t * 1.5) % 2) {
+      rect(g, sc.x + 1, sc.y + 3, 6, 1, "#7048e8");
+    }
+  }
+
+  private pingpongBall(g: CanvasRenderingContext2D, k: number) {
+    const x0 = 25 * T + 2;
+    const x1 = 28 * T - 3;
+    const phase = k % 2;
+    const u = phase < 1 ? phase : 2 - phase; // there and back
+    const x = x0 + (x1 - x0) * u;
+    const y = 20 * T + 3 - Math.abs(Math.sin(u * Math.PI)) * 7;
+    rect(g, Math.round(x), Math.round(y), 2, 2, "#fff4e6");
   }
 
   private rackLeds(g: CanvasRenderingContext2D, t: number, dyn: Dyn) {
@@ -973,6 +1247,15 @@ export class Office {
     else if (st.waiting) bg = Math.sin(t * 5) > 0 ? "#6b4a10" : "#3b2a08";
     else if (st.status === "idle" || st.status === "done") bg = "#162033";
     rect(g, sx, sy, sw, sh, bg);
+    if (st.browsing) {
+      rect(g, sx, sy, sw, sh, "#f8f9fa");
+      rect(g, sx, sy, sw, 2, "#e64980");
+      const k = Math.floor(t / 3) % 3;
+      rect(g, sx + 1, sy + 3, 5, 4, ["#ffa94d", "#74c0fc", "#b197fc"][k]);
+      rect(g, sx + 7, sy + 3, sw - 8, 1, "#adb5bd");
+      rect(g, sx + 7, sy + 5, sw - 10, 1, "#adb5bd");
+      return;
+    }
     if (st.status === "busy" || st.status === "retry") {
       const tool = st.tool ?? "";
       if (/web|fetch|search|context7|exa/.test(tool)) {
@@ -1016,7 +1299,11 @@ export class Office {
     out.push({ x: 13 * T + 7, y: 3 * T + 5, r: 10, color: "#ffa94d", a: 0.4 }); // candles
     out.push({ x: 13 * T + 41, y: 3 * T + 5, r: 10, color: "#ffa94d", a: 0.4 });
     out.push({ x: 11 * T + 8, y: 15 * T - 6, r: 16, color: "#ff8787", a: 0.3 }); // coffee machine
-    out.push({ x: 261, y: 266, r: 24, color: "#ffd43b", a: 0.45 }); // sofa reading lamp
+    const tv = this.tvScreen;
+    out.push({ x: tv.x + tv.w / 2, y: tv.y + tv.h, r: 46, color: "#74c0fc", a: dyn.tvWatchers ? 0.5 + Math.sin(t * 7) * 0.05 : 0.25 });
+    out.push({ x: this.arcadeScreen.x + 4, y: this.arcadeScreen.y + 8, r: 20, color: "#e64980", a: 0.4 });
+    out.push({ x: 26 * T + 8, y: 20 * T + 4, r: 40, color: "#fff3bf", a: 0.35 }); // games lamp
+    out.push({ x: 3 * T, y: 21 * T, r: 36, color: "#ffc9c9", a: 0.3 }); // cat corner
     out.push({ x: 232, y: 20, r: 22, color: "#69db7c", a: 0.35 }); // wall TV
     out.push({ x: 8 * T + 8, y: 2 * T + 6, r: 16, color: "#69db7c", a: dyn.bash ? 0.45 : 0.2 }); // rack
     for (const tx of WINDOWS) out.push({ x: tx * T + 16, y: 34, r: 30, color: "#a5b4fc", a: 0.25 }); // moonlight

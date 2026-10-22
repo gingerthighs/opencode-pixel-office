@@ -1,7 +1,7 @@
 // Pure state reducer: opencode bus events in, UI diff ops out.
 // Must never throw — it runs inside opencode's event hook.
 
-import type { Agent, AgentStatus, FeedEntry, FeedKind, Op, Room, Snapshot, ToolState } from "./types.ts";
+import type { Agent, AgentStatus, Ask, FeedEntry, FeedKind, Op, Room, Snapshot, ToolState } from "./types.ts";
 
 const FEED_MAX = 200;
 const SNAPSHOT_FEED = 60;
@@ -35,7 +35,13 @@ interface Entry {
   todoSummary: string;
   msgs: Map<string, { tokens: number; cost: number }>;
   seen: Set<string>;
+  /** callID → file path, remembered from running tool events (completion events may lack input) */
+  toolPaths: Map<string, string>;
 }
+
+const WRITE_TOOL = /^(edit|write|patch|apply_patch|multiedit|multi_edit|str_replace|create_file)$/i;
+const MAX_FILES = 50;
+const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 
@@ -146,13 +152,23 @@ export class Store {
           this.onTodos(p, ops);
           break;
         case "permission.updated":
-        case "permission.asked":
-        case "question.asked":
-          if (p.sessionID) {
-            const what = p.title ?? p.permission ?? (ev.type === "question.asked" ? "Frage" : "Freigabe");
-            this.setWaiting(p.sessionID, true, String(what), ops);
-          }
+        case "permission.asked": {
+          if (!p.sessionID) break;
+          const pats: unknown[] = Array.isArray(p.patterns) ? p.patterns : p.pattern ? [p.pattern].flat() : [];
+          const title = String(p.title ?? p.permission ?? p.type ?? "Freigabe");
+          const detail = pats.length ? head(pats.map(String).join(", "), 200) : undefined;
+          this.setWaiting(p.sessionID, true, title, ops, { kind: "permission", id: str(p.id) ?? str(p.requestID), title, detail });
           break;
+        }
+        case "question.asked": {
+          if (!p.sessionID) break;
+          const q = Array.isArray(p.questions) ? p.questions[0] : undefined;
+          const title = String(p.title ?? q?.question ?? q?.header ?? "Frage");
+          const raw = p.options ?? q?.options;
+          const options = Array.isArray(raw) ? raw.map((o: any) => String(o?.label ?? o)).filter(Boolean).slice(0, 8) : undefined;
+          this.setWaiting(p.sessionID, true, title, ops, { kind: "question", id: str(p.id) ?? str(p.requestID), title, options });
+          break;
+        }
         case "permission.replied":
         case "question.replied":
         case "question.rejected":
@@ -245,6 +261,8 @@ export class Store {
           status: "idle",
           waiting: false,
           todos: [],
+          files: [],
+          edits: 0,
           tokens: 0,
           cost: 0,
           createdAt: info.time?.created ?? now,
@@ -257,6 +275,7 @@ export class Store {
         todoSummary: "",
         msgs: new Map(),
         seen: new Set(),
+        toolPaths: new Map(),
       };
       this.entries.set(info.id, e);
     } else {
@@ -332,11 +351,13 @@ export class Store {
     this.emit(e, ops);
   }
 
-  private setWaiting(id: string, waiting: boolean, what: string, ops: Op[]) {
+  private setWaiting(id: string, waiting: boolean, what: string, ops: Op[], ask?: Ask) {
     const e = this.ensure(id, ops);
-    if (e.agent.waiting === waiting) return;
-    e.agent.waiting = waiting;
-    if (waiting) this.log(e, "ask", `wartet: ${head(what, 120)}`, ops);
+    const a = e.agent;
+    if (a.waiting === waiting && !ask) return;
+    if (waiting && (!a.waiting || ask?.id !== a.ask?.id)) this.log(e, "ask", `wartet: ${head(what, 120)}`, ops);
+    a.waiting = waiting;
+    a.ask = waiting ? ask : undefined;
     this.emit(e, ops);
   }
 
@@ -440,6 +461,20 @@ export class Store {
     const key = String(part.callID ?? part.id);
     const target = delegationTarget(name, st.input);
     const desc = typeof st.input?.description === "string" ? st.input.description : "";
+    const input = st.input ?? {};
+    const path = str(input.filePath) ?? str(input.path) ?? str(input.file_path) ?? str(input.file);
+    if (path) {
+      e.toolPaths.set(key, path);
+      if (e.toolPaths.size > 500) e.toolPaths.delete(e.toolPaths.keys().next().value!);
+    }
+    if (WRITE_TOOL.test(name) && state === "completed" && this.markSeen(e, "w:" + key)) {
+      const a = e.agent;
+      a.edits++;
+      const fp = e.toolPaths.get(key);
+      if (fp) {
+        a.files = [...a.files.filter((x) => x !== fp), fp].slice(-MAX_FILES);
+      }
+    }
     const prev = e.agent.tool;
     const title = target
       ? `→ @${target}${desc ? ": " + head(desc, 50) : ""}`

@@ -9,9 +9,23 @@ import { Store } from "../src/store.ts";
 const cfg = loadConfig({ host: "127.0.0.1" });
 const hub = new Hub(new Store(), { ...cfg, html: HTML, js: JS });
 await hub.listen();
+
+// simulated host controls: permission replies resolve the waiting run, interrupts abort it
+const permWaiters = new Map<string, () => void>();
+hub.setController(async (req) => {
+  console.log("control", req);
+  if (req.action === "permission") {
+    emit("permission.replied", { sessionID: req.sessionID, requestID: req.requestID, reply: req.decision });
+    permWaiters.get(req.requestID)?.();
+  } else {
+    emit("session.error", { sessionID: req.sessionID, error: { name: "MessageAbortedError" } });
+  }
+});
 console.log(`Pixel Office mock: http://${cfg.host}:${cfg.port}/${cfg.token ? "?token=" + cfg.token : ""}`);
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms * (0.7 + Math.random() * 0.6)));
+// people walk to the boss and back, so work has to take a while to look right (MOCK_SPEED=1 for fast)
+const SLOW = Number(process.env.MOCK_SPEED ?? 2.5);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms * SLOW * (0.7 + Math.random() * 0.6)));
 const emit = (type: string, properties: unknown) => hub.ingest({ type, properties });
 let seq = 0;
 const uid = (p: string) => `${p}_${(++seq).toString(36)}`;
@@ -104,6 +118,10 @@ async function bigRun() {
       await tool(id, am, "read", { filePath: "src/routes/login.ts" }, 1300);
       await tool(id, am, "read", { filePath: "test/login.test.ts" }, 1000);
     }),
+    subagent(root, m, "explorer", "Finde Session-Store + Cookies", dir, async (id, am) => {
+      await tool(id, am, "grep", { pattern: "cookie|session" }, 1600);
+      await tool(id, am, "read", { filePath: "src/server/session.ts" }, 1400);
+    }),
     subagent(root, m, "librarian", "OAuth PKCE Docs recherchieren", dir, async (id, am) => {
       await tool(id, am, "websearch", { query: "oauth 2.1 pkce node best practice" }, 1800);
       await tool(id, am, "webfetch", { url: "https://oauth.net/2/pkce/" }, 2200);
@@ -119,9 +137,17 @@ async function bigRun() {
     await say(id, am, "Recommend httpOnly SameSite=Lax cookie for refresh token, short-lived access token in memory.");
   });
 
-  emit("permission.asked", { id: "perm1", sessionID: root, permission: "bash", patterns: ["npm install openid-client"] });
-  await sleep(2500);
-  emit("permission.replied", { sessionID: root, requestID: "perm1", reply: "once" });
+  const permId = uid("per");
+  emit("permission.asked", { id: permId, sessionID: root, permission: "bash", patterns: ["npm install openid-client"] });
+  // wait for a click in the UI, or auto-approve after 12s
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, 12_000);
+    permWaiters.set(permId, () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+  if (permWaiters.delete(permId)) emit("permission.replied", { sessionID: root, requestID: permId, reply: "once" });
   await tool(root, m, "bash", { command: "npm install openid-client", description: "Install OAuth client" }, 1500);
 
   await Promise.all([

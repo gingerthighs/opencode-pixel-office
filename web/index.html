@@ -53,6 +53,43 @@
       .conn.bad { background: #ff6b6b; animation: blink 1s steps(2) infinite; }
       @keyframes blink { 50% { opacity: 0.25; } }
       main { display: grid; grid-template-columns: 1fr 380px; min-height: 0; }
+      #left { display: grid; grid-template-rows: 1fr auto; min-width: 0; min-height: 0; }
+      #timeline { display: none; max-height: 30vh; overflow-y: auto; border-top: 2px solid var(--line); background: var(--panel); padding: 4px 10px 8px; }
+      body.with-timeline #timeline { display: block; }
+      .tl-axis { position: relative; height: 16px; margin-left: 110px; border-bottom: 1px dashed var(--line); }
+      .tl-tick { position: absolute; transform: translateX(-50%); font-size: 10px; color: var(--muted); }
+      .tl-row { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: 0; color: var(--text); font: inherit; padding: 2px 0; cursor: pointer; }
+      .tl-row:hover, .tl-row.sel { background: var(--panel-2); }
+      .tl-who { display: flex; align-items: center; gap: 5px; width: 104px; flex: none; font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .tl-ava { width: 16px; height: 15px; }
+      .tl-lane { position: relative; flex: 1; height: 10px; background: #0f0c17; }
+      .tl-bar { position: absolute; top: 0; bottom: 0; background: var(--c); opacity: 0.85; }
+      .tl-bar.done { opacity: 0.45; }
+      .hbtn { background: var(--panel-2); color: var(--text); border: 0; box-shadow: var(--px); font: inherit; padding: 3px 9px; cursor: pointer; }
+      .hbtn.active { box-shadow: 0 0 0 2px var(--accent), 3px 3px 0 0 #0a0810; }
+      .breakroom { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 14px 6px; }
+      .chip { display: flex; align-items: center; gap: 5px; background: var(--panel-2); border: 0; color: var(--text); font: inherit; font-size: 12px; padding: 3px 7px 3px 3px; cursor: pointer; box-shadow: 0 0 0 1px var(--line); }
+      .chip.sel { box-shadow: 0 0 0 2px var(--accent); }
+      .avatar.sm { width: 16px; height: 15px; box-shadow: none; }
+      .ask { margin: 10px 0; padding: 8px 10px; background: #2a2210; box-shadow: 0 0 0 2px #f59f00; }
+      .ask.question { background: #1d1a33; box-shadow: 0 0 0 2px #7048e8; }
+      .ask-head { display: flex; gap: 6px; align-items: center; color: #ffd43b; }
+      .ask-title { margin: 6px 0; overflow-wrap: anywhere; }
+      .ask-detail { display: block; background: #0f0c17; padding: 4px 6px; font-size: 12px; overflow-wrap: anywhere; color: #ffe8cc; }
+      .ask-opts { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
+      .opt { background: var(--panel-3); padding: 1px 6px; font-size: 12px; }
+      .ask-btns, .ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+      .btn { border: 0; font: inherit; padding: 4px 10px; cursor: pointer; color: #16121f; box-shadow: 2px 2px 0 #0a0810; }
+      .btn.ok { background: #69db7c; }
+      .btn.ok2 { background: #38d9a9; }
+      .btn.no { background: #ff8787; }
+      .btn.armed { background: #fa5252; color: #fff; animation: blink 0.6s steps(2) infinite; }
+      .fb { font-size: 12px; color: #8ce99a; }
+      .fb.err { color: #ff8787; }
+      .files .file { display: grid; grid-template-columns: 16px auto 1fr; gap: 6px; align-items: center; padding: 2px 0; font-size: 13px; }
+      .fname { font-weight: 600; }
+      .fdir { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .hint-p { padding: 8px 0; }
       #stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: radial-gradient(ellipse at center, #1a1527 0%, var(--bg) 70%); }
       #office { position: absolute; inset: 0; image-rendering: pixelated; }
       aside { background: var(--panel); border-left: 2px solid var(--line); display: grid; grid-template-rows: auto 1fr; min-height: 0; }
@@ -126,13 +163,19 @@
       <h1>PIXEL <span>OFFICE</span></h1>
       <nav id="rooms" aria-label="Sessions"></nav>
       <div class="opts">
+        <button id="building" class="hbtn" title="Gebäude-Übersicht">▤ Gebäude</button>
+        <label title="Fäden vom Chef zu den Beauftragten"><input type="checkbox" id="threads" /> Fäden</label>
+        <label><input type="checkbox" id="timeline-toggle" /> Zeitleiste</label>
         <label><input type="checkbox" id="follow" /> folgen</label>
         <label><input type="checkbox" id="show-all" /> alle</label>
         <span id="conn" class="conn" title="verbinde…"></span>
       </div>
     </header>
     <main>
-      <div id="stage"><canvas id="office"></canvas></div>
+      <div id="left">
+        <div id="stage"><canvas id="office"></canvas></div>
+        <div id="timeline" aria-label="Zeitleiste"></div>
+      </div>
       <aside>
         <div id="agents"></div>
         <div id="detail"></div>

@@ -1,7 +1,8 @@
-import type { Op, Snapshot } from "../src/types.ts";
+import type { ControlRequest, Op, Snapshot } from "../src/types.ts";
 import { Panel } from "./panel.ts";
 import { Scene } from "./scene.ts";
 import { ClientState } from "./state.ts";
+import { Timeline } from "./timeline.ts";
 
 const store = {
   get(k: string) {
@@ -21,43 +22,84 @@ const store = {
   },
 };
 
+const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
 const state = new ClientState();
-const scene = new Scene(document.getElementById("office") as HTMLCanvasElement, state);
-const follow = document.getElementById("follow") as HTMLInputElement;
-const showAll = document.getElementById("show-all") as HTMLInputElement;
-const conn = document.getElementById("conn")!;
+const scene = new Scene($<HTMLCanvasElement>("office"), state);
+const follow = $<HTMLInputElement>("follow");
+const showAll = $<HTMLInputElement>("show-all");
+const threads = $<HTMLInputElement>("threads");
+const timelineToggle = $<HTMLInputElement>("timeline-toggle");
+const buildingBtn = $<HTMLButtonElement>("building");
+const timelineEl = $<HTMLElement>("timeline");
+const conn = $<HTMLElement>("conn");
+
+// control requests must echo the per-process nonce the server put into this page
+const nonce = document.querySelector('meta[name="po-nonce"]')?.getAttribute("content") ?? "";
+let caps: { control: boolean; reason?: string } = { control: false, reason: "lädt…" };
+fetch("api/caps")
+  .then((r) => r.json())
+  .then((c) => (caps = c))
+  .catch(() => (caps = { control: false, reason: "nicht erreichbar" }));
+
+async function control(req: ControlRequest) {
+  const res = await fetch("api/control", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-po-nonce": nonce },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error((await res.text()) || res.statusText);
+}
 
 let roomId = store.get("room");
 let selected: string | undefined;
 let rendered = -1;
 let dirty = true;
 
-follow.checked = store.get("follow") !== "0";
-follow.onchange = () => {
-  store.set("follow", follow.checked ? "1" : "0");
-  dirty = true;
+const bindToggle = (el: HTMLInputElement, key: string, def: boolean, apply: (on: boolean) => void) => {
+  el.checked = (store.get(key) ?? (def ? "1" : "0")) === "1";
+  apply(el.checked);
+  el.onchange = () => {
+    store.set(key, el.checked ? "1" : "0");
+    apply(el.checked);
+    dirty = true;
+  };
 };
+bindToggle(follow, "follow", true, () => {});
+bindToggle(threads, "threads", false, (on) => (scene.showThreads = on));
+bindToggle(timelineToggle, "timeline", false, (on) => document.body.classList.toggle("with-timeline", on));
 showAll.onchange = () => (dirty = true);
 
-const panel = new Panel(state, {
-  selectRoom(id) {
-    roomId = id;
-    store.set("room", id);
-    follow.checked = false;
-    store.set("follow", "0");
-    selected = undefined;
-    dirty = true;
-  },
-  selectAgent(id) {
-    selected = id;
-    dirty = true;
-  },
-});
+buildingBtn.onclick = () => scene.setMode(scene.mode === "building" ? "office" : "building");
+scene.onModeChange = (mode) => buildingBtn.classList.toggle("active", mode === "building");
 
-scene.onSelect = (id) => {
-  selected = id;
+function pickRoom(id: string) {
+  roomId = id;
+  store.set("room", id);
+  follow.checked = false;
+  store.set("follow", "0");
+  selected = undefined;
+  dirty = true;
+}
+
+const select = (key: string | undefined) => {
+  selected = key;
   dirty = true;
 };
+
+const panel = new Panel(state, {
+  selectRoom: pickRoom,
+  select,
+  control,
+  caps: () => caps,
+  workerName: (id) => scene.workerName(id),
+  personInfo: (key) => scene.personInfo(key),
+  roster: () => scene.roster(),
+});
+const timeline = new Timeline(timelineEl, state, (id) => scene.workerName(id), select);
+
+scene.onSelect = select;
+scene.onPickRoom = pickRoom;
 
 /** Pick the room to show: followed = most recently active one, else keep the chosen one if it still exists. */
 function chooseRoom() {
@@ -75,19 +117,21 @@ function chooseRoom() {
     roomId = rooms[0]?.id;
   }
   scene.setRoom(roomId);
-  if (selected && !state.agents.has(selected)) selected = undefined;
+  if (selected && !selected.startsWith("p:") && !state.agents.has(selected)) selected = undefined;
   scene.selected = selected;
 }
 
 setInterval(() => {
   if (!dirty && rendered === state.version) return;
   chooseRoom();
+  scene.syncNow();
   panel.render(roomId, selected);
+  if (timelineToggle.checked) timeline.render(roomId, selected);
   rendered = state.version;
   dirty = false;
 }, 250);
-// refresh relative times
-setInterval(() => (dirty = true), 5000);
+// refresh relative times, breakroom activities and the timeline's "now"
+setInterval(() => (dirty = true), 2000);
 
 function connect() {
   const es = new EventSource("api/events");

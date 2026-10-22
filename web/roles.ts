@@ -109,3 +109,43 @@ export const STATUS_LABEL: Record<string, string> = {
   done: "fertig",
   waiting: "braucht Freigabe",
 };
+
+// ---------- permanent staff ----------
+
+/** Which permanent team an agent name belongs to (tasks of that kind go to that team's people). */
+const TEAM_OF: Record<string, string> = {
+  orchestrator: "orchestrator", sisyphus: "orchestrator", atlas: "orchestrator", hephaestus: "orchestrator",
+  prometheus: "orchestrator", build: "orchestrator", plan: "orchestrator",
+  explorer: "explorer", explore: "explorer", general: "explorer",
+  librarian: "librarian",
+  oracle: "oracle", metis: "oracle", momus: "oracle", council: "oracle",
+  fixer: "fixer", "sisyphus-junior": "fixer",
+  designer: "designer", "frontend-ui-ux-engineer": "designer", "multimodal-looker": "designer", "document-writer": "designer",
+  reviewer: "reviewer", observer: "reviewer",
+};
+
+export function teamOf(agentName: string): string | undefined {
+  const key = agentName.toLowerCase().replace(/^@/, "").trim();
+  return TEAM_OF[key] ?? TEAM_OF[key.split(/[\s(:]/)[0]];
+}
+
+export interface StaffDef {
+  key: string;
+  name: string;
+  team: string;
+}
+
+/** Always in the office. Order matters: it decides who gets which desk and who is asked first. */
+export const STAFF: StaffDef[] = [
+  { key: "otto", name: "Otto", team: "orchestrator" },
+  { key: "ella", name: "Ella", team: "explorer" },
+  { key: "emil", name: "Emil", team: "explorer" },
+  { key: "lotte", name: "Lotte", team: "librarian" },
+  { key: "orla", name: "Orla", team: "oracle" },
+  { key: "fritz", name: "Fritz", team: "fixer" },
+  { key: "frieda", name: "Frieda", team: "fixer" },
+  { key: "dani", name: "Dani", team: "designer" },
+  { key: "rita", name: "Rita", team: "reviewer" },
+];
+
+export const TEMP_NAMES = ["Aushilfe Tim", "Aushilfe Mia", "Aushilfe Ben", "Aushilfe Zoe", "Aushilfe Kai", "Aushilfe Lia", "Aushilfe Max", "Aushilfe Ida"];

@@ -1,9 +1,11 @@
 // HTTP + SSE server. Uses node:http so it runs inside opencode (Bun) and under plain Node (mock/dev).
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { timingSafeEqual } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { BusEvent, Store } from "./store.ts";
-import type { Op } from "./types.ts";
+import type { ControlRequest, Op } from "./types.ts";
+
+export type Controller = (req: ControlRequest) => Promise<void>;
 
 export interface HubOptions {
   port: number;
@@ -47,10 +49,31 @@ export class Hub {
   private clients = new Set<ServerResponse>();
   private server?: Server;
   private timers: ReturnType<typeof setInterval>[] = [];
+  /** per-process secret embedded in the page; control requests must echo it (blocks cross-site POSTs) */
+  private nonce = randomBytes(16).toString("hex");
+  private controller?: Controller;
 
   constructor(store: Store, opts: HubOptions) {
     this.store = store;
     this.opts = opts;
+  }
+
+  setController(c: Controller | undefined) {
+    this.controller = c;
+  }
+
+  /**
+   * Writes from the UI (permission replies, stop) are allowed with a token, or without one only when
+   * the server listens on loopback and the request names a loopback host (no DNS rebinding).
+   */
+  private controlAllowed(req: IncomingMessage): { ok: boolean; reason?: string } {
+    if (!this.controller) return { ok: false, reason: "Host-API ohne Steuerung" };
+    if (this.opts.token) return { ok: true };
+    const loopbackBind = this.opts.host === "127.0.0.1" || this.opts.host === "localhost" || this.opts.host === "::1";
+    if (!loopbackBind) return { ok: false, reason: "PIXEL_OFFICE_TOKEN setzen, um im Netz zu steuern" };
+    const host = (req.headers.host ?? "").replace(/:\d+$/, "");
+    if (!["127.0.0.1", "localhost", "[::1]"].includes(host)) return { ok: false, reason: "nur über localhost" };
+    return { ok: true };
   }
 
   get clientCount() {
@@ -114,6 +137,27 @@ export class Hub {
     const url = new URL(req.url ?? "/", "http://x");
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
+    if (path === "/api/control" && req.method === "POST") {
+      if (!this.authorized(req, url)) return this.send(res, 401, "text/plain", "unauthorized");
+      const nonce = req.headers["x-po-nonce"];
+      if (typeof nonce !== "string" || !safeEqual(nonce, this.nonce)) return this.send(res, 403, "text/plain", "bad nonce");
+      const allowed = this.controlAllowed(req);
+      if (!allowed.ok) return this.send(res, 403, "text/plain", allowed.reason ?? "forbidden");
+      const body = JSON.parse((await readBody(req)) || "{}") as ControlRequest;
+      if (!body || typeof body.sessionID !== "string" || !["permission", "interrupt"].includes(body.action)) {
+        return this.send(res, 400, "text/plain", "bad request");
+      }
+      if (body.action === "permission" && (typeof body.requestID !== "string" || !["once", "always", "reject"].includes(body.decision))) {
+        return this.send(res, 400, "text/plain", "bad request");
+      }
+      try {
+        await this.controller!(body);
+        return this.send(res, 200, "application/json", JSON.stringify({ ok: true }));
+      } catch (err) {
+        return this.send(res, 502, "application/json", JSON.stringify({ ok: false, error: String(err) }));
+      }
+    }
+
     if (path === "/api/ingest" && req.method === "POST") {
       // without a token, only same-host opencode processes may push events
       const ok = this.opts.token ? this.authorized(req, url) : isLoopback(req.socket.remoteAddress);
@@ -145,9 +189,15 @@ export class Hub {
     switch (path) {
       case "/":
       case "/index.html":
-        return this.send(res, 200, "text/html; charset=utf-8", this.opts.html, { "content-security-policy": CSP });
+        return this.send(res, 200, "text/html; charset=utf-8", this.opts.html.replace("</head>", `<meta name="po-nonce" content="${this.nonce}" /></head>`), {
+          "content-security-policy": CSP,
+        });
       case "/app.js":
         return this.send(res, 200, "text/javascript; charset=utf-8", this.opts.js);
+      case "/api/caps": {
+        const c = this.controlAllowed(req);
+        return this.send(res, 200, "application/json", JSON.stringify({ control: c.ok, reason: c.reason }));
+      }
       case "/api/state":
         return this.send(res, 200, "application/json", JSON.stringify(this.store.snapshot()));
       case "/api/events":

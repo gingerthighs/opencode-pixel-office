@@ -130,15 +130,27 @@ export class V2Mapper {
         return out;
       }
       case "permission.asked":
-        if (sid) out.push({ type, properties: { sessionID: sid, permission: str(p.permission) ?? str(p.action) ?? str(p.title) } });
+        if (sid) {
+          out.push({
+            type,
+            properties: {
+              sessionID: sid,
+              id: str(p.id) ?? str(p.requestID),
+              permission: str(p.permission) ?? str(p.action) ?? str(p.title),
+              patterns: Array.isArray(p.patterns) ? p.patterns : Array.isArray(p.resources) ? p.resources : str(p.resource) ? [p.resource] : undefined,
+            },
+          });
+        }
         return out;
       case "permission.replied":
         if (sid) out.push({ type, properties: { sessionID: sid } });
         return out;
       case "form.created":
         if (sid && sid !== "global") {
-          const title = str(p.form?.fields?.[0]?.title) ?? str(p.form?.title) ?? str(p.title) ?? "Frage";
-          out.push({ type: "question.asked", properties: { sessionID: sid, title } });
+          const field = p.form?.fields?.[0];
+          const title = str(field?.description) ?? str(field?.title) ?? str(p.form?.title) ?? str(p.title) ?? "Frage";
+          const options = Array.isArray(field?.options) ? field.options.map((o: any) => str(o?.label) ?? str(o?.value) ?? String(o)) : undefined;
+          out.push({ type: "question.asked", properties: { sessionID: sid, id: str(p.form?.id) ?? str(p.id), title, options } });
         }
         return out;
       case "form.replied":

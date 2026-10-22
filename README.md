@@ -11,7 +11,16 @@ opencode-Plugin, das im opencode-Prozess einen kleinen Webserver startet und Orc
   Wand-TV mit aktiven Agents + Tokens, echte Uhr, Whiteboard mit Todo-Fortschritt, Büro-Katze
 - Bereichsschilder auf dem Boden (3×5-Pixelfont, beim Rauszoomen UI-Font); Namen und Bubbles werden
   kollisionsfrei nach Priorität platziert
-- Rein lesend, keine Steuerung; keine Runtime-Dependencies, eine einzige JS-Datei
+- **Festes Personal** mit Namen (Otto, Ella, Emil, Lotte, Orla, Fritz, Frieda, Dani, Rita): Aufträge gehen an
+  das passende Team-Mitglied, bei Engpass kommt eine Aushilfe durch die Tür. Wer frei hat, macht Pause –
+  Kaffee, Fernsehen, Sitzsack, Arcade, Tischtennis, Handy, Surfen oder Katze streicheln
+- **Papierkram**: Arbeiter holen ihren Auftrag in der Ablage des Chefs ab, legen ihn auf den Schreibtisch, jede
+  Datei-Änderung wächst als Papierstapel (Klick → Dateiliste), fertige Berichte landen im Eingangskorb des Chefs
+- **Freigaben im UI** (Einmal / Immer / Ablehnen) und **Stopp** pro Agent; Rückfragen werden angezeigt, Antworten
+  gehen weiterhin im Terminal (die Plugin-API kann keine Antworten senden)
+- **Fäden** (wer hat wen beauftragt), **Zeitleiste** (wer arbeitete wann), **Gebäude** mit einer Etage pro Projekt
+  und Aufzug zwischen den Büros
+- Keine Runtime-Dependencies, eine einzige JS-Datei
 
 | Agent | Platz |
 |---|---|
@@ -74,6 +83,13 @@ Hintergrund-Service (`opencode serve --service`), nicht die TUI — nach dem Set
   (In-Memory-Feeds gehen dabei verloren, Sessions werden neu eingelesen).
 - Zur Diagnose landen von jedem Event-Typ die ersten zwei Beispiele (Strings gekürzt) in
   `~/.local/share/opencode/log/pixel-office-events.jsonl`.
+
+## Steuerung (Freigaben, Stopp)
+
+Schreibende Aktionen gehen über `POST /api/control` und brauchen den Nonce aus der ausgelieferten Seite
+(gegen Cross-Site-Requests). Ohne `PIXEL_OFFICE_TOKEN` ist Steuerung nur erlaubt, wenn der Server auf
+Loopback lauscht und die Anfrage an `localhost`/`127.0.0.1` geht (gegen DNS-Rebinding); im Netz (`0.0.0.0`)
+nur mit Token.
 
 ## Mehrere opencode-Prozesse
 

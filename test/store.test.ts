@@ -128,3 +128,27 @@ test("helpers", () => {
   assert.equal(delegationTarget("task", { subagent_type: "fixer" }), "fixer");
   assert.equal(delegationTarget("background_output", { task_id: "x" }), undefined);
 });
+
+test("asks carry request ids and details; write tools collect files", () => {
+  const { store, ev } = setup();
+  ev("session.created", { info: { id: "s" } });
+  ev("permission.asked", { id: "per_1", sessionID: "s", permission: "bash", patterns: ["npm install x"] });
+  assert.deepEqual(store.agent("s")?.ask, { kind: "permission", id: "per_1", title: "bash", detail: "npm install x" });
+  ev("permission.replied", { sessionID: "s", requestID: "per_1", reply: "once" });
+  assert.equal(store.agent("s")?.ask, undefined);
+  ev("question.asked", { id: "q1", sessionID: "s", questions: [{ question: "Welche DB?", options: [{ label: "SQLite" }, { label: "Postgres" }] }] });
+  assert.deepEqual(store.agent("s")?.ask?.options, ["SQLite", "Postgres"]);
+
+  const tool = (callID: string, status: string, input: object) =>
+    ev("message.part.updated", { part: { id: callID, sessionID: "s", messageID: "m", type: "tool", tool: "edit", callID, state: { status, input } } });
+  tool("c1", "running", { filePath: "/x/a.ts" });
+  tool("c1", "completed", {});
+  tool("c2", "running", { filePath: "/x/b.ts" });
+  tool("c2", "completed", {});
+  tool("c3", "running", { filePath: "/x/a.ts" });
+  tool("c3", "completed", {});
+  tool("c3", "completed", {});
+  const a = store.agent("s")!;
+  assert.equal(a.edits, 3);
+  assert.deepEqual(a.files, ["/x/b.ts", "/x/a.ts"]);
+});

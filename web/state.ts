@@ -8,6 +8,8 @@ export class ClientState {
   rooms = new Map<string, Room>();
   agents = new Map<string, Agent>();
   feeds = new Map<string, FeedEntry[]>();
+  /** every agent seen in this view, kept after the server prunes it (timeline) */
+  history = new Map<string, Agent & { endedAt?: number }>();
   /** local clock minus server clock */
   skew = 0;
   version = 0;
@@ -18,11 +20,13 @@ export class ClientState {
     this.rooms.clear();
     this.agents.clear();
     this.feeds.clear();
+    this.history.clear();
     this.skew = Date.now() - s.now;
     for (const r of s.rooms) this.rooms.set(r.id, r);
     for (const { feed, ...a } of s.agents) {
       this.agents.set(a.id, a);
       this.feeds.set(a.id, feed);
+      this.history.set(a.id, a);
     }
     this.version++;
     this.onReset?.();
@@ -36,14 +40,19 @@ export class ClientState {
           break;
         case "room-remove":
           this.rooms.delete(o.id);
+          for (const [id, a] of this.history) if (a.roomId === o.id) this.history.delete(id);
           break;
         case "agent":
           this.agents.set(o.agent.id, o.agent);
+          this.history.set(o.agent.id, o.agent);
           break;
-        case "agent-remove":
+        case "agent-remove": {
           this.agents.delete(o.id);
           this.feeds.delete(o.id);
+          const h = this.history.get(o.id);
+          if (h && !h.doneAt) h.endedAt = this.serverNow();
           break;
+        }
         case "feed": {
           const f = this.feeds.get(o.id) ?? [];
           f.push(o.entry);
@@ -57,6 +66,10 @@ export class ClientState {
       }
     }
     this.version++;
+  }
+
+  serverNow() {
+    return Date.now() - this.skew;
   }
 
   /** server timestamp → age in ms on the local clock */

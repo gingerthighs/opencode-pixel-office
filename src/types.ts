@@ -32,6 +32,15 @@ export interface Snippet {
   at: number;
 }
 
+/** an open permission request or question the agent is blocked on */
+export interface Ask {
+  kind: "permission" | "question";
+  id?: string;
+  title: string;
+  detail?: string;
+  options?: string[];
+}
+
 export interface Agent {
   id: string;
   roomId: string;
@@ -40,6 +49,11 @@ export interface Agent {
   title: string;
   status: AgentStatus;
   waiting: boolean;
+  ask?: Ask;
+  /** files written/edited by this agent (most recent last) */
+  files: string[];
+  /** number of completed write/edit tool calls */
+  edits: number;
   tool?: ToolInfo;
   snippet?: Snippet;
   todos: Todo[];
@@ -68,6 +82,10 @@ export interface Snapshot {
   agents: AgentView[];
   now: number;
 }
+
+export type ControlRequest =
+  | { action: "permission"; sessionID: string; requestID: string; decision: "once" | "always" | "reject" }
+  | { action: "interrupt"; sessionID: string };
 
 export type Op =
   | { op: "room"; room: Room }

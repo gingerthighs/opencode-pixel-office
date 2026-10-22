@@ -4,7 +4,7 @@
 import type { Plugin, PluginInput } from "@opencode-ai/plugin";
 import { HTML, JS } from "./assets.generated.ts";
 import { loadConfig, type Config } from "./config.ts";
-import { Hub } from "./server.ts";
+import { Hub, type Controller } from "./server.ts";
 import { Store, type BusEvent } from "./store.ts";
 import { sample, toolEvent, V2Mapper } from "./v2.ts";
 
@@ -23,6 +23,7 @@ class Instance {
   private queue: BusEvent[] = [];
   private flushTimer?: ReturnType<typeof setTimeout>;
   private lastListenTry = 0;
+  private controllers: Controller[] = [];
 
   constructor(cfg: Config, log: Log) {
     this.cfg = cfg;
@@ -40,6 +41,7 @@ class Instance {
     try {
       await hub.listen();
       this.hub = hub;
+      hub.setController((req) => this.dispatch(req));
       const shown = this.cfg.host === "0.0.0.0" || this.cfg.host === "::" ? "<server-ip>" : this.cfg.host;
       this.log("info", `Pixel Office läuft: http://${shown}:${this.cfg.port}/${this.cfg.token ? "?token=…" : ""}`);
       if (!this.cfg.token && this.cfg.host !== "127.0.0.1" && this.cfg.host !== "localhost") {
@@ -49,6 +51,20 @@ class Instance {
       if ((err as { code?: string }).code !== "EADDRINUSE") throw err;
       this.log("info", `Port ${this.cfg.port} belegt – leite Events an bestehendes Pixel Office weiter.`);
     }
+  }
+
+  /** register a way to act on sessions (permission reply, interrupt); returns an unregister fn */
+  addController(c: Controller): () => void {
+    this.controllers.push(c);
+    return () => {
+      this.controllers = this.controllers.filter((x) => x !== c);
+    };
+  }
+
+  private async dispatch(req: Parameters<Controller>[0]) {
+    const c = this.controllers.at(-1);
+    if (!c) throw new Error("keine Steuerung verfügbar");
+    await c(req);
   }
 
   ingest(ev: BusEvent) {
@@ -170,11 +186,24 @@ const server: Plugin = async (input, options) => {
   const inst = await acquire(options ?? {}, log);
   if (!inst) return {};
   void inst.seed(client);
+  const c = client as any;
+  const unregister = inst.addController(async (req) => {
+    if (req.action === "interrupt") {
+      await c.session.abort({ path: { id: req.sessionID } });
+    } else if (typeof c.permission?.reply === "function") {
+      await c.permission.reply({ sessionID: req.sessionID, requestID: req.requestID, reply: req.decision });
+    } else {
+      await c.postSessionIdPermissionsPermissionId({ path: { id: req.sessionID, permissionID: req.requestID }, body: { response: req.decision } });
+    }
+  });
   return {
     event: async ({ event }) => {
       inst.ingest(event as BusEvent);
     },
-    dispose: () => release(inst),
+    dispose: async () => {
+      unregister();
+      await release(inst);
+    },
   };
 };
 
@@ -188,6 +217,17 @@ const setup = async (ctx: any): Promise<() => Promise<void>> => {
 
   const mapper = new V2Mapper();
   const disposers: (() => unknown)[] = [];
+  disposers.push(
+    inst.addController(async (req) => {
+      if (req.action === "interrupt") {
+        if (typeof ctx.session?.interrupt !== "function") throw new Error("session.interrupt fehlt");
+        await ctx.session.interrupt({ sessionID: req.sessionID, resume: false });
+      } else {
+        if (typeof ctx.permission?.reply !== "function") throw new Error("permission.reply fehlt");
+        await ctx.permission.reply({ sessionID: req.sessionID, requestID: req.requestID, decision: req.decision });
+      }
+    }),
+  );
 
   for (const phase of ["before", "after"] as const) {
     try {
