@@ -1,0 +1,29 @@
+{
+  "name": "opencode-pixel-office",
+  "version": "0.1.0",
+  "description": "opencode plugin: watch your orchestrator + subagents live in a top-down pixel-art office (web UI served from the plugin)",
+  "type": "module",
+  "main": "dist/pixel-office.js",
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "oh-my-opencode",
+    "pixel-art"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build": "node build.ts",
+    "typecheck": "node build.ts && tsc --noEmit",
+    "test": "node --test test/store.test.ts",
+    "mock": "node build.ts && node scripts/mock.ts"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "1.18.32",
+    "@types/node": "22.18.0",
+    "esbuild": "0.25.10",
+    "typescript": "5.9.3"
+  }
+}

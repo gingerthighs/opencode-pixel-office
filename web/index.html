@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pixel Office</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2316121f'/%3E%3Crect x='4' y='3' width='8' height='7' fill='%23f1c27d'/%3E%3Crect x='4' y='3' width='8' height='3' fill='%234a2f1b'/%3E%3Crect x='4' y='10' width='8' height='4' fill='%233b5bdb'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --bg: #100d18;
+        --panel: #1a1626;
+        --panel-2: #231e33;
+        --line: #342c4a;
+        --text: #e9e4ff;
+        --muted: #8f86ad;
+        --accent: #ffd43b;
+        --font: "Pixelify Sans", ui-monospace, monospace;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.35 var(--font); }
+      body { display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
+      header {
+        display: flex; align-items: center; gap: 12px; padding: 8px 12px;
+        background: var(--panel); border-bottom: 2px solid var(--line); min-width: 0;
+      }
+      h1 { font-size: 18px; margin: 0; white-space: nowrap; letter-spacing: 0.5px; }
+      h1 span { color: var(--accent); }
+      #rooms { display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: thin; }
+      .tab {
+        display: flex; align-items: center; gap: 6px; max-width: 260px; flex: none;
+        background: var(--panel-2); color: var(--text); border: 2px solid var(--line);
+        padding: 4px 10px; font: inherit; cursor: pointer; border-radius: 0;
+      }
+      .tab.active { border-color: var(--accent); box-shadow: 0 2px 0 var(--accent); }
+      .tab .proj { color: var(--muted); white-space: nowrap; }
+      .tab .ttl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .opts { display: flex; gap: 10px; align-items: center; white-space: nowrap; color: var(--muted); }
+      .opts label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
+      .conn { width: 10px; height: 10px; background: #868e96; flex: none; }
+      .conn.ok { background: #51cf66; }
+      .conn.bad { background: #ff6b6b; animation: blink 1s steps(2) infinite; }
+      @keyframes blink { 50% { opacity: 0.2; } }
+      main { display: grid; grid-template-columns: 1fr 360px; min-height: 0; }
+      #stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+      #office { position: absolute; inset: 0; image-rendering: pixelated; cursor: pointer; }
+      aside { background: var(--panel); border-left: 2px solid var(--line); display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+      #agents { max-height: 38vh; overflow-y: auto; border-bottom: 2px solid var(--line); padding: 6px 0; }
+      .agent {
+        display: flex; gap: 8px; align-items: flex-start; width: 100%; text-align: left;
+        background: none; border: 0; color: var(--text); font: inherit; padding: 6px 10px; cursor: pointer;
+      }
+      .agent:hover { background: var(--panel-2); }
+      .agent.sel { background: #2e2745; box-shadow: inset 3px 0 0 var(--accent); }
+      .agent.done { opacity: 0.55; }
+      .agent .main { display: grid; min-width: 0; }
+      .agent .name { font-weight: 600; }
+      .role { color: var(--muted); font-size: 12px; margin-left: 6px; }
+      .agent .sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .dot { width: 8px; height: 8px; flex: none; margin-top: 5px; display: inline-block; }
+      #detail { overflow-y: auto; padding: 10px 12px 20px; min-height: 0; }
+      .d-head { display: flex; align-items: center; gap: 8px; font-size: 17px; }
+      .d-head .dot { margin-top: 0; }
+      .d-title { color: var(--muted); margin: 4px 0 8px; overflow-wrap: anywhere; }
+      .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
+      .stat { background: var(--panel-2); border: 2px solid var(--line); padding: 4px 8px; display: grid; min-width: 0; }
+      .stat .k { color: var(--muted); font-size: 11px; text-transform: uppercase; }
+      .stat .v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      h4 { margin: 12px 0 6px; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
+      .todo { padding: 2px 0; overflow-wrap: anywhere; }
+      .todo.completed { color: #8ce99a; text-decoration: line-through; opacity: 0.8; }
+      .todo.in_progress { color: #ffc078; }
+      .f { display: grid; grid-template-columns: 34px 20px 1fr; gap: 4px; padding: 3px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+      .f .t { color: var(--muted); font-size: 11px; padding-top: 2px; }
+      .f .x { overflow-wrap: anywhere; }
+      .f.error .x { color: #ff8787; }
+      .f.ask .x { color: #ffc078; }
+      .f.think .x { color: #b197fc; font-style: italic; }
+      .f.prompt .x { color: #a5d8ff; }
+      .muted { color: var(--muted); padding: 6px 10px; }
+      .hint { padding: 0; }
+      @media (max-width: 860px) {
+        body { overflow: auto; grid-template-rows: auto auto; }
+        header { flex-wrap: wrap; padding: 8px 16px; }
+        #rooms { order: 3; flex-basis: 100%; }
+        main { grid-template-columns: 1fr; grid-template-rows: auto auto; }
+        #stage { aspect-ratio: 8 / 5; max-height: 70vh; }
+        aside { border-left: 0; border-top: 2px solid var(--line); }
+        #agents { max-height: none; }
+        #detail { overflow: visible; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>PIXEL <span>OFFICE</span></h1>
+      <nav id="rooms" aria-label="Sessions"></nav>
+      <div class="opts">
+        <label><input type="checkbox" id="follow" /> folgen</label>
+        <label><input type="checkbox" id="show-all" /> alle</label>
+        <span id="conn" class="conn" title="verbinde…"></span>
+      </div>
+    </header>
+    <main>
+      <div id="stage"><canvas id="office"></canvas></div>
+      <aside>
+        <div id="agents"></div>
+        <div id="detail"></div>
+      </aside>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
