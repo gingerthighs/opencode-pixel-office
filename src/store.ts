@@ -67,7 +67,7 @@ export function summarizeInput(input: unknown): string {
   return "";
 }
 
-const DELEGATION = /^(task|delegate|background_task|call_omo_agent|spawn)/i;
+const DELEGATION = /^(task|subagent|delegate|background_task|call_omo_agent|spawn)/i;
 
 export function delegationTarget(tool: string, input: unknown): string | undefined {
   if (!DELEGATION.test(tool) || !input || typeof input !== "object") return;
@@ -440,10 +440,10 @@ export class Store {
     const key = String(part.callID ?? part.id);
     const target = delegationTarget(name, st.input);
     const desc = typeof st.input?.description === "string" ? st.input.description : "";
+    const prev = e.agent.tool;
     const title = target
       ? `→ @${target}${desc ? ": " + head(desc, 50) : ""}`
-      : st.title || summarizeInput(st.input) || "";
-    const prev = e.agent.tool;
+      : st.title || summarizeInput(st.input) || (prev?.callId === key ? prev.title : "");
     const changed = !prev || prev.callId !== key || prev.state !== state;
     e.agent.tool = { name, title: head(String(title), 80), state, callId: key, at: this.clock() };
     if (state !== "pending" && this.markSeen(e, "t:" + key)) {

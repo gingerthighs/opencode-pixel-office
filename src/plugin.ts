@@ -6,6 +6,7 @@ import { HTML, JS } from "./assets.generated.ts";
 import { loadConfig, type Config } from "./config.ts";
 import { Hub } from "./server.ts";
 import { Store, type BusEvent } from "./store.ts";
+import { sample, toolEvent, V2Mapper } from "./v2.ts";
 
 const KEY = Symbol.for("opencode-pixel-office");
 const SEED_WINDOW = 2 * 60 * 60 * 1000;
@@ -115,40 +116,168 @@ class Instance {
   }
 }
 
+declare const __BUILD__: string;
+const BUILD = typeof __BUILD__ === "string" ? __BUILD__ : "dev";
+
+interface Slot {
+  build: string;
+  instance: Promise<Instance>;
+}
+const g = globalThis as unknown as Record<symbol, Slot | undefined>;
+
+async function acquire(options: Record<string, unknown>, log: Log): Promise<Instance | undefined> {
+  const prev = g[KEY];
+  if (prev && prev.build !== BUILD) {
+    // hot reload of a new plugin version: the old module may never get disposed, so retire its server
+    // (0.1.0 stored the bare instance promise in the slot)
+    g[KEY] = undefined;
+    const old: Promise<Instance> | undefined = typeof (prev as any).then === "function" ? (prev as any) : prev.instance;
+    await old?.then((i) => i.close()).catch(() => {});
+  }
+  g[KEY] ??= {
+    build: BUILD,
+    instance: (async () => {
+      const inst = new Instance(loadConfig(options), log);
+      await inst.start();
+      return inst;
+    })(),
+  };
+  try {
+    const inst = await g[KEY]!.instance;
+    inst.refs++;
+    return inst;
+  } catch (err) {
+    g[KEY] = undefined;
+    log("error", `Pixel Office konnte nicht starten: ${String(err)}`);
+  }
+}
+
+async function release(inst: Instance) {
+  if (--inst.refs > 0) return;
+  if (g[KEY]) {
+    const current = await g[KEY]!.instance.catch(() => undefined);
+    if (current === inst) g[KEY] = undefined;
+  }
+  await inst.close();
+}
+
+/** opencode 1.x host */
 const server: Plugin = async (input, options) => {
   const { client } = input;
   const log: Log = (level, message) => {
     client.app.log({ body: { service: "pixel-office", level, message } }).catch(() => console.error(message));
   };
-
-  const g = globalThis as unknown as Record<symbol, Promise<Instance> | undefined>;
-  g[KEY] ??= (async () => {
-    const inst = new Instance(loadConfig(options ?? {}), log);
-    await inst.start();
-    return inst;
-  })();
-
-  let inst: Instance;
-  try {
-    inst = await g[KEY]!;
-  } catch (err) {
-    g[KEY] = undefined;
-    log("error", `Pixel Office konnte nicht starten: ${String(err)}`);
-    return {};
-  }
-  inst.refs++;
+  const inst = await acquire(options ?? {}, log);
+  if (!inst) return {};
   void inst.seed(client);
-
   return {
     event: async ({ event }) => {
       inst.ingest(event as BusEvent);
     },
-    dispose: async () => {
-      if (--inst.refs > 0) return;
-      g[KEY] = undefined;
-      await inst.close();
-    },
+    dispose: () => release(inst),
   };
 };
 
-export default { id: "opencode-pixel-office", server };
+/** opencode 2.x host: setup(ctx) → dispose */
+const setup = async (ctx: any): Promise<() => Promise<void>> => {
+  // the TUI process also loads plugins but has no event stream — only the server hosts the office
+  if (typeof ctx?.event?.subscribe !== "function") return async () => {};
+  const log: Log = (level, message) => (level === "info" ? console.log : console.error)(`[pixel-office] ${message}`);
+  const inst = await acquire(isRec(ctx.options) ? ctx.options : {}, log);
+  if (!inst) return async () => {};
+
+  const mapper = new V2Mapper();
+  const disposers: (() => unknown)[] = [];
+
+  for (const phase of ["before", "after"] as const) {
+    try {
+      const reg = await ctx.tool?.hook?.(`execute.${phase}`, async (e: unknown) => {
+        sample(`tool.execute.${phase}`, e);
+        const ev = toolEvent(e as Record<string, unknown>, phase);
+        if (ev) inst.ingest(ev);
+      });
+      if (reg?.dispose) disposers.push(() => reg.dispose());
+    } catch (err) {
+      log("warn", `tool.hook(${phase}) nicht verfügbar: ${String(err)}`);
+    }
+  }
+
+  // events can reference sessions we never saw created (e.g. a revived subagent):
+  // look them up once so the store learns the parent link and agent
+  const known = new Set<string>();
+  const lookup = (sid: string | undefined) => {
+    if (!sid || known.has(sid) || typeof ctx.session?.get !== "function") return;
+    known.add(sid);
+    if (known.size > 5000) known.delete(known.values().next().value!);
+    Promise.resolve(ctx.session.get({ sessionID: sid }))
+      .then((res: any) => {
+        const s = res?.data ?? res;
+        if (s?.id) inst.ingest({ type: "session.updated", properties: { info: { ...s, directory: s.directory ?? s.location?.directory } } });
+      })
+      .catch(() => {});
+  };
+
+  let stopped = false;
+  const iterator = ctx.event.subscribe()[Symbol.asyncIterator]();
+  disposers.push(() => {
+    stopped = true;
+    return iterator.return?.();
+  });
+  void (async () => {
+    try {
+      while (!stopped) {
+        const next = await iterator.next();
+        if (next.done) break;
+        const ev = next.value;
+        sample(String(ev?.type), ev);
+        for (const mapped of mapper.map(ev ?? {})) {
+          const p = mapped.properties ?? {};
+          if (mapped.type === "session.created" || mapped.type === "session.updated") known.add(p.info?.id);
+          else lookup(p.sessionID ?? p.part?.sessionID ?? p.info?.sessionID);
+          inst.ingest(mapped);
+        }
+      }
+    } catch (err) {
+      log("warn", `Event-Stream beendet: ${String(err)}`);
+    }
+  })();
+
+  void seedV2(ctx, inst);
+
+  return async () => {
+    for (const d of disposers.splice(0)) {
+      try {
+        await d();
+      } catch {
+        // ignore
+      }
+    }
+    await release(inst);
+  };
+};
+
+async function seedV2(ctx: any, inst: Instance) {
+  try {
+    if (typeof ctx.session?.list !== "function") return;
+    const res = await ctx.session.list({});
+    const list: any[] = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+    sample("session.list[0]", list[0]);
+    const now = Date.now();
+    for (const s of list.sort((a, b) => (a.time?.created ?? 0) - (b.time?.created ?? 0))) {
+      const updated = s.time?.updated ?? s.time?.created ?? 0;
+      const idle = s.time?.idle;
+      // v2 has no status listing: activity after the last idle mark means a run is in progress
+      const running = now - updated < 10 * 60_000 && (idle == null || updated - idle > 5000);
+      // roots from the last 2h; children only while they still seem to run
+      if (s.parentID ? !running : now - updated > SEED_WINDOW) continue;
+      inst.ingest({ type: "session.updated", properties: { info: { ...s, directory: s.directory ?? s.location?.directory } } });
+      if (running) inst.ingest({ type: "session.status", properties: { sessionID: s.id, status: { type: "busy" } } });
+    }
+  } catch {
+    // seeding is best effort
+  }
+}
+
+const isRec = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+
+export default { id: "opencode-pixel-office", server, setup };

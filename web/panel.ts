@@ -87,7 +87,9 @@ export class Panel {
         b.title = `${r.directory}\n${r.title}`;
         const dot = el("span", "dot");
         dot.style.background = this.state.roomBusy(r.id) ? STATUS_COLOR.busy : STATUS_COLOR.idle;
-        b.append(dot, el("span", "proj", basename(r.directory) || "—"), el("span", "ttl", r.title));
+        // v2 session listings carry no title until the session gets one
+        const title = r.title !== "Session" ? r.title : new Date(r.createdAt).toLocaleString([], { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+        b.append(dot, el("span", "proj", basename(r.directory) || "—"), el("span", "ttl", title));
         b.onclick = () => this.cb.selectRoom(r.id);
         return b;
       });

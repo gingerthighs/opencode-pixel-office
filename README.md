@@ -39,7 +39,8 @@ Datei in den globalen Plugin-Ordner kopieren — opencode lädt sie beim nächst
 scp dist/pixel-office.js server:~/.config/opencode/plugins/pixel-office.js
 ```
 
-(Alternativ projektweise nach `.opencode/plugins/`.) opencode danach neu starten — laufende Sessions sind davon betroffen.
+(Alternativ projektweise nach `.opencode/plugins/`.) opencode 2.x lädt die Datei beim Kopieren automatisch neu;
+bei 1.x opencode neu starten.
 
 ## Konfiguration
 
@@ -48,11 +49,27 @@ Env-Variablen (für den opencode-Prozess, z. B. im systemd-Service oder in `.bas
 | Variable | Default | |
 |---|---|---|
 | `PIXEL_OFFICE_PORT` | `4777` | |
-| `PIXEL_OFFICE_HOST` | `0.0.0.0` | `127.0.0.1` für nur lokal / SSH-Tunnel |
+| `PIXEL_OFFICE_HOST` | `127.0.0.1` | `0.0.0.0` für Zugriff aus LAN/Tailscale |
 | `PIXEL_OFFICE_TOKEN` | – | wenn gesetzt: Aufruf einmal mit `?token=…`, danach Cookie |
 
-Aufruf: `http://<server-ip>:4777/` (bzw. Tailscale-Name). Ohne Token ist die UI für jeden im Netz lesbar —
-sie zeigt Prompts, Dateinamen und Befehle. Nur in vertrauenswürdigen Netzen (LAN/Tailscale) ohne Token betreiben.
+Aufruf lokal: `http://127.0.0.1:4777/`, auf einem Server mit `PIXEL_OFFICE_HOST=0.0.0.0`: `http://<server-ip>:4777/`.
+Ohne Token ist die UI für jeden im Netz lesbar — sie zeigt Prompts, Dateinamen und Befehle.
+Nur in vertrauenswürdigen Netzen (LAN/Tailscale) ohne Token betreiben.
+
+Die Env-Variablen müssen im Prozess ankommen, der die Plugins lädt. Bei opencode 2.x ist das der
+Hintergrund-Service (`opencode serve --service`), nicht die TUI — nach dem Setzen den Service neu starten.
+
+## opencode-Versionen
+
+- **1.x**: klassische Hooks (`server` → `event`), Snapshot über `client.session.list/status`.
+- **2.x**: `setup(ctx)` mit `ctx.event.subscribe()` + `ctx.tool.hook("execute.before/after")`.
+  Die v2-Events (`session.execution.*`, `session.text/reasoning.*`, `session.tool.*`, `session.usage.updated`,
+  `form.*`, …) werden in `src/v2.ts` auf das v1-Format übersetzt. Sessions, die nur indirekt auftauchen
+  (z. B. per `task_revive` wiederbelebte Subagents), werden einmal per `ctx.session.get` nachgeschlagen.
+- Ändert sich `pixel-office.js`, lädt opencode das Plugin neu; der neue Build löst den Server des alten ab
+  (In-Memory-Feeds gehen dabei verloren, Sessions werden neu eingelesen).
+- Zur Diagnose landen von jedem Event-Typ die ersten zwei Beispiele (Strings gekürzt) in
+  `~/.local/share/opencode/log/pixel-office-events.jsonl`.
 
 ## Mehrere opencode-Prozesse
 
@@ -63,7 +80,8 @@ schicken ihre Events per `POST /api/ingest` (nur Loopback bzw. mit Token) an ihn
 ## Aufbau
 
 ```
-src/plugin.ts   Plugin-Entry (default export { id, server }), Singleton, Snapshot via SDK, Forwarding
+src/plugin.ts   Plugin-Entry (default export { id, server, setup }), Singleton, Snapshot, Forwarding
+src/v2.ts       opencode-2.x-Adapter: v2-Events + Tool-Hooks → v1-Events
 src/store.ts    reiner Reducer: opencode-Events → UI-Ops (getestet in test/store.test.ts)
 src/server.ts   node:http Server: /, /app.js, /api/state, /api/events (SSE), /api/ingest
 web/            Canvas-UI: sprites (prozedural), office (Layout/Pathfinding), characters, bubbles, panel
