@@ -105,6 +105,9 @@ export class Char {
   }
 
   private setGoal(goal: Goal, office: Office) {
+    // getting up from the sofa: step forward off it first instead of climbing over the backrest
+    const from: Tile = this.spot?.via && this.arrived ? this.spot.via : this.tile;
+    const lead = from === this.tile ? [] : [{ x: from.tx * T + 8, y: from.ty * T + 12 }];
     this.goal = goal;
     this.arrived = false;
     let target: Tile;
@@ -120,14 +123,14 @@ export class Char {
         this.path = [];
         return;
       }
-      target = this.spot;
+      target = this.spot.via ?? this.spot;
       final = { x: this.spot.px, y: this.spot.py };
     } else {
       office.releaseSpot(this.id);
       target = office.door;
       final = { x: office.door.tx * T + 8, y: office.door.ty * T + 14 };
     }
-    this.path = office.path(this.tile, target).map((t) => ({ x: t.tx * T + 8, y: t.ty * T + 12 }));
+    this.path = [...lead, ...office.path(from, target).map((t) => ({ x: t.tx * T + 8, y: t.ty * T + 12 }))];
     this.path.push(final);
   }
 
@@ -223,6 +226,7 @@ export class Cat {
   private mode: "walk" | "sit" | "sleep" = "sit";
   private until = 0;
   private walkT = 0;
+  private nap?: Spot;
 
   constructor(office: Office) {
     const t = office.randomFreeTile();
@@ -258,19 +262,25 @@ export class Cat {
       }
       return;
     }
+    // someone wants to sit where the cat sleeps: make room
+    if (this.nap && office.isSpotTaken(this.nap.id)) this.until = 0;
     if (now < this.until) return;
     // pick the next destination: sometimes a nap on a free sofa seat
     const sofa = office.spots.find((s) => s.sit && !office.isSpotTaken(s.id));
+    const from: Tile = this.nap?.via ?? { tx: Math.floor(this.x / T), ty: Math.floor(this.y / T) };
+    const lead = this.nap?.via ? [{ x: from.tx * T + 8, y: from.ty * T + 12 }] : [];
+    this.nap = undefined;
     let target: Tile;
     if (sofa && Math.random() < 0.3) {
-      target = sofa;
+      this.nap = sofa;
+      target = sofa.via ?? sofa;
       this.mode = "sleep";
     } else {
       target = office.randomFreeTile();
       this.mode = "walk";
     }
-    this.path = office.path({ tx: Math.floor(this.x / T), ty: Math.floor(this.y / T) }, target).map((t) => ({ x: t.tx * T + 8, y: t.ty * T + 12 }));
-    if (this.mode === "sleep") this.path.push({ x: target.tx * T + 8, y: target.ty * T + 9 });
+    this.path = [...lead, ...office.path(from, target).map((t) => ({ x: t.tx * T + 8, y: t.ty * T + 12 }))];
+    if (this.nap) this.path.push({ x: this.nap.px, y: this.nap.py - 2 });
   }
 
   draw(g: CanvasRenderingContext2D, t: number) {

@@ -195,6 +195,7 @@ export class Scene {
       draw: () => c.draw(g, t, this.state.agents.get(c.id), this.office, c.id === this.selected),
     }));
     actors.push({ y: this.cat.y, draw: () => this.cat.draw(g, t) });
+    for (const row of this.office.propRows()) actors.push({ y: row.sortY, draw: () => row.draw(g, t, dyn) });
     actors.sort((a, b) => a.y - b.y).forEach((a) => a.draw());
 
     // paper planes
@@ -327,16 +328,22 @@ export class Scene {
       const head = this.toScreen(it.c.x, it.c.headY);
       const tagW = measureTag(g, it.a.name);
       const color = it.a.waiting ? STATUS_COLOR.waiting : STATUS_COLOR[it.a.status];
-      // try the natural spot, then a few steps upward
+      // at a desk the person looks up at the monitor: keep the screen visible by putting the
+      // name under the chair and the bubble above the monitor
+      const mon = it.c.sitting && it.c.goal === "seat" ? it.c.seat?.mon : undefined;
+      const tagSlot = (step: number): Box =>
+        mon
+          ? { x: clampX(head.x - tagW / 2, tagW), y: this.toScreen(it.c.x, it.c.y + 5).y + step * (TAG_H + 2), w: tagW, h: TAG_H }
+          : { x: clampX(head.x - tagW / 2, tagW), y: head.y - TAG_H - 3 - step * (TAG_H + 2), w: tagW, h: TAG_H };
       let tag: Box | undefined;
       for (let step = 0; step < 4; step++) {
-        const cand = { x: clampX(head.x - tagW / 2, tagW), y: head.y - TAG_H - 3 - step * (TAG_H + 2), w: tagW, h: TAG_H };
+        const cand = tagSlot(step);
         if (free(cand)) {
           tag = cand;
           break;
         }
       }
-      if (!tag && it.prio >= 20) tag = { x: clampX(head.x - tagW / 2, tagW), y: head.y - TAG_H - 3, w: tagW, h: TAG_H };
+      if (!tag && it.prio >= 20) tag = tagSlot(0);
       if (tag) {
         placed.push(tag);
         const t = tag;
@@ -352,7 +359,7 @@ export class Scene {
       }
       if (!it.bubble) continue;
       const m = it.bubble;
-      const anchorY = (tag ? tag.y : head.y) - 2;
+      const anchorY = mon ? this.toScreen(mon.x, mon.y - 11).y : (tag ? tag.y : head.y) - 2;
       let box: Box | undefined;
       for (let step = 0; step < 5; step++) {
         const cand = { x: clampX(head.x - m.w / 2, m.w), y: anchorY - m.h - step * 12, w: m.w, h: m.h };

@@ -28,6 +28,8 @@ export interface Spot extends Tile {
   py: number;
   sit: boolean;
   face: Pose;
+  /** free tile to step from/to when the spot itself is blocked (sofa) */
+  via?: Tile;
 }
 
 export interface SeatState {
@@ -110,13 +112,51 @@ export class Office {
   private blocked = new Uint8Array(W * H);
   private seatOwner = new Map<string, string>();
   private spotOwner = new Map<string, string>();
+  /** current draw target: the floor/wall background or one furniture row layer */
   private g: CanvasRenderingContext2D;
+  private base: CanvasRenderingContext2D;
+  /**
+   * Upright furniture is drawn into one layer per tile row (the row the object stands on) so the
+   * scene can depth-sort it with people and the cat: whoever walks behind a desk disappears behind
+   * its monitor instead of being painted over it.
+   */
+  private rows = new Map<number, { c: HTMLCanvasElement; y0: number }>();
 
   constructor() {
     const [c, g] = makeCanvas(W * T, H * T);
     this.bg = c;
     this.g = g;
+    this.base = g;
     this.build();
+  }
+
+  /** draw `fn` into the furniture layer of tile row `row` */
+  private onRow(row: number, fn: () => void) {
+    let layer = this.rows.get(row);
+    if (!layer) {
+      const y0 = row * T - 40;
+      const [c, g] = makeCanvas(W * T, 64);
+      g.translate(0, -y0);
+      layer = { c, y0 };
+      this.rows.set(row, layer);
+    }
+    const prev = this.g;
+    this.g = layer.c.getContext("2d")!;
+    fn();
+    this.g = prev;
+  }
+
+  /** Depth-sortable furniture rows; sortY sits just in front of the objects' base. */
+  propRows(): { row: number; sortY: number; draw: (g: CanvasRenderingContext2D, t: number, dyn: Dyn) => void }[] {
+    return [...this.rows].map(([row, layer]) => ({
+      row,
+      sortY: row * T + 13,
+      draw: (g, t, dyn) => {
+        g.drawImage(layer.c, 0, layer.y0);
+        for (const s of this.seats) if (s.mon && s.ty - 1 === row) this.monitor(g, s, dyn.seats.get(s.id), t);
+        this.rowDynamic(row, g, t, dyn);
+      },
+    }));
   }
 
   // ---------- allocation ----------
@@ -234,72 +274,74 @@ export class Office {
     for (const z of ZONES) if (z.color) this.carpet(z.x, z.y, z.w, z.h, z.color);
     this.walls();
 
-    // boss office
+    // boss office (wall decor + low items stay in the background, upright furniture goes to row layers)
     this.whiteboard(2, 4);
     this.poster(102);
-    this.plant(1, 2);
-    this.plant(7, 2);
-    this.rack(8, 2);
-    this.cabinet(1, 6);
-    this.addDesk("boss", "boss", 3, 4, 3);
+    this.onRow(2, () => this.plant(1, 2));
+    this.onRow(2, () => this.plant(7, 2));
+    this.onRow(3, () => this.rack(8, 2));
+    this.onRow(6, () => this.cabinet(1, 6));
+    this.onRow(4, () => this.addDesk("boss", "boss", 3, 4, 3));
 
     // oracle
-    this.plant(11, 2, 1);
-    this.plant(18, 2, 2);
-    this.roundTable(13, 3);
+    this.onRow(2, () => this.plant(11, 2, 1));
+    this.onRow(2, () => this.plant(18, 2, 2));
+    this.onRow(4, () => this.roundTable(13, 3));
     for (const sx of [13, 14, 15]) this.addSeat("oracle", "table", sx, 5, sx * T + 8, 5 * T + 10);
 
     // library
     for (let x = 21; x < 31; x++) this.bookshelf(x, 2);
-    this.addDesk("library", "desk", 22, 4);
-    this.addDesk("library", "desk", 27, 4);
-    this.addDesk("library", "desk", 22, 7);
-    this.addDesk("library", "desk", 27, 7);
-    this.globe(25, 4);
+    this.onRow(4, () => this.addDesk("library", "desk", 22, 4));
+    this.onRow(4, () => this.addDesk("library", "desk", 27, 4));
+    this.onRow(7, () => this.addDesk("library", "desk", 22, 7));
+    this.onRow(7, () => this.addDesk("library", "desk", 27, 7));
+    this.onRow(4, () => this.globe(25, 4));
 
     // open plan
-    this.addDesk("open", "desk", 11, 9);
-    this.addDesk("open", "desk", 14, 9);
-    this.addDesk("review", "desk", 17, 9);
-    this.lamp(18, 9);
-    this.addDesk("open", "desk", 11, 12);
-    this.addDesk("open", "desk", 14, 12);
-    this.addDesk("open", "desk", 17, 12);
-    this.plant(20, 8, 1);
-    this.printer(20, 11);
+    this.onRow(9, () => this.addDesk("open", "desk", 11, 9));
+    this.onRow(9, () => this.addDesk("open", "desk", 14, 9));
+    this.onRow(9, () => this.addDesk("review", "desk", 17, 9));
+    this.onRow(9, () => this.lamp(18, 9));
+    this.onRow(12, () => this.addDesk("open", "desk", 11, 12));
+    this.onRow(12, () => this.addDesk("open", "desk", 14, 12));
+    this.onRow(12, () => this.addDesk("open", "desk", 17, 12));
+    this.onRow(8, () => this.plant(20, 8, 1));
+    this.onRow(11, () => this.printer(20, 11));
     for (const [x, y] of [[13, 10], [16, 13], [10, 13]] as const) this.bin(x, y);
 
     // studio
-    this.addDesk("studio", "studio", 2, 12);
-    this.addDesk("studio", "studio", 5, 12);
-    this.addDesk("studio", "studio", 2, 15);
-    this.addDesk("studio", "studio", 5, 15);
-    this.easel(8, 11);
-    this.easel(8, 14, true);
+    this.onRow(12, () => this.addDesk("studio", "studio", 2, 12));
+    this.onRow(12, () => this.addDesk("studio", "studio", 5, 12));
+    this.onRow(15, () => this.addDesk("studio", "studio", 2, 15));
+    this.onRow(15, () => this.addDesk("studio", "studio", 5, 15));
+    this.onRow(11, () => this.easel(8, 11));
+    this.onRow(14, () => this.easel(8, 14, true));
 
     // workshop
-    this.addDesk("workbench", "bench", 24, 12);
-    this.addDesk("workbench", "bench", 27, 12);
-    this.addDesk("workbench", "bench", 24, 15);
-    this.addDesk("workbench", "bench", 27, 15);
-    this.toolCabinet(30, 10);
-    this.toolCabinet(30, 13);
-    this.crates(23, 17);
+    this.onRow(12, () => this.addDesk("workbench", "bench", 24, 12));
+    this.onRow(12, () => this.addDesk("workbench", "bench", 27, 12));
+    this.onRow(15, () => this.addDesk("workbench", "bench", 24, 15));
+    this.onRow(15, () => this.addDesk("workbench", "bench", 27, 15));
+    this.onRow(11, () => this.toolCabinet(30, 10));
+    this.onRow(14, () => this.toolCabinet(30, 13));
+    this.onRow(17, () => this.crates(23, 17));
 
     // lounge
-    this.counter(10, 15, 3);
-    this.cooler(13, 15);
+    this.onRow(15, () => this.counter(10, 15, 3));
+    this.onRow(15, () => this.cooler(13, 15));
     this.sofa(17, 17, 3);
     this.sideTable(256, 272);
-    this.plant(10, 18, 2);
-    this.plant(21, 18);
-    this.plant(1, 18, 1);
-    this.plant(30, 18, 2);
+    this.block(16, 17); // side table
+    this.onRow(18, () => this.plant(10, 18, 2));
+    this.onRow(18, () => this.plant(21, 18));
+    this.onRow(18, () => this.plant(1, 18, 1));
+    this.onRow(18, () => this.plant(30, 18, 2));
     for (const [x, y] of [[11, 16], [12, 16], [14, 16]] as const) {
       this.spots.push({ id: `s${x},${y}`, tx: x, ty: y, px: x * T + 8, py: y * T + 12, sit: false, face: "up" });
     }
+    // sofa seats are blocked tiles: people (and the cat) step onto them only from the front row
     for (const x of [17, 18, 19]) {
-      this.spots.push({ id: `sofa${x}`, tx: x, ty: 17, px: x * T + 8, py: 17 * T + 11, sit: true, face: "down" });
+      this.spots.push({ id: `sofa${x}`, tx: x, ty: 17, px: x * T + 8, py: 17 * T + 11, sit: true, face: "down", via: { tx: x, ty: 18 } });
     }
 
     const [sc, sg] = makeCanvas(W * T, H * T);
@@ -677,6 +719,7 @@ export class Office {
     this.r(x - 4, y - 4, 4, 18, "#364fc7");
     this.r(x + w * T, y - 4, 4, 18, "#364fc7");
     this.r(x, y + 2, w * T, 12, "#4263eb");
+    this.block(tx, ty, w, 1);
     for (let i = 1; i < w; i++) this.r(x + i * T, y + 2, 1, 12, "#364fc7");
     // cushions
     this.r(x + 2, y - 3, 6, 4, "#ffd43b");
@@ -740,9 +783,10 @@ export class Office {
   }
 
   private addSeat(zone: Zone, kind: Seat["kind"], tx: number, ty: number, px: number, py: number, mon?: Seat["mon"]) {
-    this.r(px - 5, py - 7, 10, 7, "#3b3f5c");
-    this.r(px - 5, py - 7, 10, 1, "#4c5175");
-    this.chairBack(this.g, px, py);
+    // chairs are low and get sat on: always part of the floor layer
+    rect(this.base, px - 5, py - 7, 10, 7, "#3b3f5c");
+    rect(this.base, px - 5, py - 7, 10, 1, "#4c5175");
+    this.chairBack(this.base, px, py);
     this.seats.push({ id: `${tx},${ty}`, zone, kind, tx, ty, px, py, mon });
   }
 
@@ -758,10 +802,17 @@ export class Office {
     this.windows(g, t, dyn.daylight);
     this.tv(g, t, dyn);
     this.clockHands(g);
-    for (const s of this.seats) {
-      if (!s.mon) continue;
-      this.monitor(g, s, dyn.seats.get(s.id), t);
-    }
+    this.whiteboardTodos(g, dyn.todos);
+  }
+
+  /** animated details that sit on a furniture row, drawn right after that row layer */
+  private rowDynamic(row: number, g: CanvasRenderingContext2D, t: number, dyn: Dyn) {
+    if (row === 3) this.rackLeds(g, t, dyn);
+    if (row === 4) this.crystalBall(g, t, dyn);
+    if (row === 15) this.loungeFx(g, t, dyn);
+  }
+
+  private rackLeds(g: CanvasRenderingContext2D, t: number, dyn: Dyn) {
     // server rack LEDs (busy when anyone runs bash)
     const rx = 8 * T + 4;
     const ry = 2 * T - 6;
@@ -772,7 +823,9 @@ export class Office {
         rect(g, rx + j * 3, ry + i * 6, 2, 1, on ? (j === 2 ? "#ffa94d" : "#69db7c") : "#2f3a2f");
       }
     }
-    this.whiteboardTodos(g, dyn.todos);
+  }
+
+  private crystalBall(g: CanvasRenderingContext2D, t: number, dyn: Dyn) {
     // crystal ball
     const bx = 14 * T + 8;
     const by = 4 * T + 10;
@@ -795,6 +848,9 @@ export class Office {
       rect(g, cx - f * 0, 3 * T + 4 - f, 1, 2, "#ffa94d");
       rect(g, cx, 3 * T + 5, 1, 1, "#fff3bf");
     }
+  }
+
+  private loungeFx(g: CanvasRenderingContext2D, t: number, dyn: Dyn) {
     // coffee steam
     if (dyn.lounge) {
       const cx = 11 * T + 8;
@@ -815,6 +871,11 @@ export class Office {
     const skyHi = mix("#1f2c55", "#a5d8ff", day);
     for (const tx of WINDOWS) {
       const x = tx * T;
+      // everything below stays inside the glass
+      g.save();
+      g.beginPath();
+      g.rect(x, 11, 2 * T, 15);
+      g.clip();
       rect(g, x, 11, 2 * T, 15, sky);
       rect(g, x, 11, 2 * T, 4, skyHi);
       if (day < 0.6) {
@@ -832,12 +893,14 @@ export class Office {
       }
       if (day > 0.3) {
         g.globalAlpha = Math.min(1, (day - 0.3) / 0.4);
-        const off = ((t * 2 + tx * 9) % 44) - 10;
+        // clouds drift in from the left edge of the pane and out on the right
+        const off = ((t * 2 + tx * 9) % 42) - 9;
         rect(g, x + Math.round(off), 15, 8, 2, "#f8f9fa");
         rect(g, x + Math.round(off) + 2, 14, 4, 1, "#f8f9fa");
         if (tx === WINDOWS[0]) rect(g, x + 4, 13, 4, 4, "#ffe066");
         g.globalAlpha = 1;
       }
+      g.restore();
       // mullions
       rect(g, x + 15, 11, 2, 15, "#2a2540");
       rect(g, x, 18, 2 * T, 1, "#2a2540");
