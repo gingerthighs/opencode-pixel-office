@@ -255,10 +255,11 @@ export class Scene {
     const id = "temp:" + a.id;
     const temp = new Person({
       id,
-      name: TEMP_NAMES[this.tempSeq++ % TEMP_NAMES.length],
+      // same session → same temp, even after the view is rebuilt
+      name: this.credits.get(a.id)?.name ?? TEMP_NAMES[this.tempSeq++ % TEMP_NAMES.length],
       team: team ?? a.name,
       look: lookOf(a.name, a.id),
-      home: this.office.claimSeat(roleOf(a.name).zone, id),
+      home: this.office.claimSeat("temp", id),
       temp: true,
     });
     temp.enterAt(this.office);

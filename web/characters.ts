@@ -325,8 +325,8 @@ export class Person {
     w.office.releaseSpot(this.id);
     const seat = this.home;
     if (!seat) {
-      // no free desk: work standing in the open-plan area
-      const t = w.office.randomFreeTileIn({ x: 10, y: 10, w: 11, h: 4 });
+      // no free laptop seat: work standing in the temps room
+      const t = w.office.randomFreeTileIn(w.office.tempArea);
       this.moveTo(w.office, t, center(t), "down", undefined, () => this.arrivedAtDesk(w));
       return;
     }
@@ -419,7 +419,7 @@ export class Person {
       }
       case "phone": {
         office.releaseSpot(this.id);
-        const t = office.randomFreeTileIn(Math.random() < 0.6 ? office.lounge : { x: 10, y: 8, w: 11, h: 6 });
+        const t = office.randomFreeTileIn(Math.random() < 0.6 ? office.lounge : office.hall);
         this.go(w, t, center(t), "down", undefined, instant);
         this.spot = undefined;
         return true;
@@ -625,7 +625,7 @@ export class Cat {
       ].find((n) => !office.isBlocked(n.tx, n.ty));
       target = near ?? office.randomFreeTile();
     } else {
-      target = this.plan === "sit" ? office.randomFreeTileIn({ x: 1, y: 19, w: 6, h: 4 }) : office.randomFreeTile();
+      target = this.plan === "sit" ? office.randomFreeTileIn(office.catArea) : office.randomFreeTile();
     }
     this.path = [...lead, ...office.path(from, target).map(center)];
     if (final) this.path.push(final);

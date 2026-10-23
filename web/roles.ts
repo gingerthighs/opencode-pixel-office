@@ -1,6 +1,6 @@
 // Agent name → office zone + look. Covers oh-my-opencode-slim, classic oh-my-opencode and opencode built-ins.
 
-export type Zone = "boss" | "library" | "oracle" | "studio" | "workbench" | "review" | "open";
+export type Zone = "boss" | "library" | "oracle" | "studio" | "workbench" | "review" | "open" | "temp";
 export type Accessory = "crown" | "cap" | "glasses" | "hardhat" | "beret" | "wizard" | "visor" | "headset" | "none";
 
 export interface Look {
