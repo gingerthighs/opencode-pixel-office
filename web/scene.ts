@@ -667,8 +667,9 @@ export class Scene {
     g.fillStyle = "#37b24d";
     g.fillRect(0, ch - 24, cw, 4);
 
-    const fh = Math.max(46, Math.min(72, (ch - 90) / Math.max(1, floors.length)));
-    const bw = Math.min(cw - 32, 760);
+    // floors grow with the free space so a two-storey tower doesn't look like a shed
+    const fh = Math.max(46, Math.min(130, (ch - 150) / Math.max(1, floors.length)));
+    const bw = Math.min(cw - 32, 900);
     const bx = Math.round((cw - bw) / 2);
     const bh = fh * floors.length + 18;
     const by = Math.max(40, ch - 24 - bh);

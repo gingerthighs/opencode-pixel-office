@@ -56,8 +56,11 @@ let selected: string | undefined;
 let rendered = -1;
 let dirty = true;
 
+// ?threads=1&timeline=1&follow=0&view=building override the remembered toggles (handy for links)
+const params = new URLSearchParams(location.search);
+
 const bindToggle = (el: HTMLInputElement, key: string, def: boolean, apply: (on: boolean) => void) => {
-  el.checked = (store.get(key) ?? (def ? "1" : "0")) === "1";
+  el.checked = (params.get(key) ?? store.get(key) ?? (def ? "1" : "0")) === "1";
   apply(el.checked);
   el.onchange = () => {
     store.set(key, el.checked ? "1" : "0");
@@ -72,6 +75,7 @@ showAll.onchange = () => (dirty = true);
 
 buildingBtn.onclick = () => scene.setMode(scene.mode === "building" ? "office" : "building");
 scene.onModeChange = (mode) => buildingBtn.classList.toggle("active", mode === "building");
+if (params.get("view") === "building") scene.setMode("building");
 
 function pickRoom(id: string) {
   roomId = id;
@@ -133,9 +137,22 @@ setInterval(() => {
 // refresh relative times, breakroom activities and the timeline's "now"
 setInterval(() => (dirty = true), 2000);
 
+let streamed = false;
+
 function connect() {
+  // quick first paint from a plain request; the stream sends its own snapshot when it connects
+  fetch("api/state")
+    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((snap: Snapshot) => {
+      if (streamed) return;
+      state.load(snap);
+      scene.reset();
+      dirty = true;
+    })
+    .catch(() => {});
   const es = new EventSource("api/events");
   es.addEventListener("snapshot", (e) => {
+    streamed = true;
     state.load(JSON.parse((e as MessageEvent).data) as Snapshot);
     scene.reset();
     conn.className = "conn ok";

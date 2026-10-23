@@ -17,7 +17,7 @@
   "scripts": {
     "build": "node build.ts",
     "typecheck": "node build.ts && tsc --noEmit",
-    "test": "node --test test/store.test.ts test/v2.test.ts",
+    "test": "node --test test/store.test.ts test/v2.test.ts test/config.test.ts",
     "mock": "node build.ts && node scripts/mock.ts"
   },
   "devDependencies": {

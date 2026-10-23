@@ -6,7 +6,8 @@ import { loadConfig } from "../src/config.ts";
 import { Hub } from "../src/server.ts";
 import { Store } from "../src/store.ts";
 
-const cfg = loadConfig({ host: "127.0.0.1" });
+// the demo ignores ~/.config/opencode/pixel-office.json so it never fights a real install for the port
+const cfg = loadConfig({ host: "127.0.0.1" }, process.env, {});
 const hub = new Hub(new Store(), { ...cfg, html: HTML, js: JS });
 await hub.listen();
 
