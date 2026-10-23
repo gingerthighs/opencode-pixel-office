@@ -102,9 +102,9 @@ export const ZONES: RoomDef[] = [
   { zone: "studio", label: "STUDIO", x: 1, y: 12, w: 6, h: 4, color: "#285866", sign: { x: 48, y: 11 * T + 5 } },
   { zone: "workbench", label: "WERKSTATT", x: 8, y: 12, w: 6, h: 4, color: "#5a4b3c", sign: { x: 200, y: 11 * T + 5 } },
   { zone: "temp", label: "AUSHILFEN", x: 18, y: 12, w: 13, h: 4, color: "#4b4330", sign: { x: 392, y: 11 * T + 5 } },
-  { zone: "cat", label: "KATZENECKE", x: 1, y: 17, w: 6, h: 6, color: "#5a3550", sign: { x: 64, y: 16 * T + 5 } },
+  { zone: "cat", label: "KATZENECKE", x: 1, y: 17, w: 6, h: 6, color: "#5a3550", sign: { x: 76, y: 16 * T + 5 } },
   { zone: "games", label: "SPIELECKE", x: 8, y: 17, w: 6, h: 6, color: "#2e4d3c", sign: { x: 176, y: 16 * T + 5 } },
-  { zone: "lounge", label: "LOUNGE", x: 18, y: 17, w: 13, h: 6, color: "#3b4561", sign: { x: 336, y: 16 * T + 5 } },
+  { zone: "lounge", label: "LOUNGE", x: 18, y: 17, w: 13, h: 6, color: "#3b4561", sign: { x: 470, y: 16 * T + 5 } },
 ];
 
 /** interior walls: horizontal runs (y, x0..x1) and vertical runs (x, y0..y1) with door tiles left open */
@@ -423,13 +423,13 @@ export class Office {
     this.onRow(13, () => this.addDesk("studio", "studio", 2, 13));
     this.onRow(12, () => this.easel(6, 12));
     this.onRow(14, () => this.easel(6, 14, true));
-    this.onRow(12, () => this.plant(1, 12, 1));
+    this.onRow(14, () => this.plant(1, 14, 1));
     this.onRow(15, () => this.plant(1, 15, 2));
 
     // --- workshop (Fritz, Frieda) ---
     this.onRow(13, () => this.addDesk("workbench", "bench", 8, 13));
     this.onRow(13, () => this.addDesk("workbench", "bench", 11, 13));
-    this.onRow(13, () => this.toolCabinet(13, 12));
+    this.onRow(15, () => this.toolCabinet(13, 14));
     this.onRow(15, () => this.crates(8, 15));
 
     // --- temps: one long table with laptops ---
