@@ -14,6 +14,12 @@
     "pixel-art"
   ],
   "license": "MIT",
+  "author": "gingerthighs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gingerthighs/opencode-pixel-office.git"
+  },
+  "homepage": "https://github.com/gingerthighs/opencode-pixel-office#readme",
   "scripts": {
     "build": "node build.ts",
     "typecheck": "node build.ts && tsc --noEmit",

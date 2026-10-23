@@ -13,6 +13,7 @@ has nothing to do takes a break in the lounge.
 ![oh-my-opencode](https://img.shields.io/badge/oh--my--opencode-slim%20%26%20classic-7048e8)
 ![Dependencies](https://img.shields.io/badge/runtime%20deps-0-40c057)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
 <img src="docs/office-day.png" alt="Pixel Office by day: boss office, library with explorers at work, a temp on a laptop, the lounge" width="900">
 
@@ -299,6 +300,7 @@ scripts/
 
 ## 📜 Licenses
 
+- Code: [MIT](LICENSE) © gingerthighs
 - Font: [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans) under the SIL Open Font License 1.1
   (`web/fonts/OFL.txt`).
 - All graphics are drawn procedurally in code – no third-party sprites.
