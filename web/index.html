@@ -1,14 +1,19 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Pixel Office</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2316121f'/%3E%3Crect x='4' y='3' width='8' height='7' fill='%23f1c27d'/%3E%3Crect x='4' y='3' width='8' height='3' fill='%234a2f1b'/%3E%3Crect x='4' y='10' width='8' height='4' fill='%233b5bdb'/%3E%3C/svg%3E" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet" />
     <style>
+      /* Pixelify Sans (SIL OFL 1.1, see fonts/OFL.txt) – build.ts inlines it, no request to any third party */
+      @font-face {
+        font-family: "Pixelify Sans";
+        font-style: normal;
+        font-weight: 400 700;
+        font-display: swap;
+        src: url("fonts/PixelifySans-latin.woff2") format("woff2");
+      }
       :root {
         --bg: #100d18;
         --panel: #1a1626;
@@ -163,18 +168,18 @@
       <h1>PIXEL <span>OFFICE</span></h1>
       <nav id="rooms" aria-label="Sessions"></nav>
       <div class="opts">
-        <button id="building" class="hbtn" title="Gebäude-Übersicht">▤ Gebäude</button>
-        <label title="Fäden vom Chef zu den Beauftragten"><input type="checkbox" id="threads" /> Fäden</label>
-        <label><input type="checkbox" id="timeline-toggle" /> Zeitleiste</label>
-        <label><input type="checkbox" id="follow" /> folgen</label>
-        <label><input type="checkbox" id="show-all" /> alle</label>
-        <span id="conn" class="conn" title="verbinde…"></span>
+        <button id="building" class="hbtn" title="Building overview">▤ Building</button>
+        <label title="Threads from the boss to everyone working"><input type="checkbox" id="threads" /> Threads</label>
+        <label><input type="checkbox" id="timeline-toggle" /> Timeline</label>
+        <label><input type="checkbox" id="follow" /> Follow</label>
+        <label><input type="checkbox" id="show-all" /> All</label>
+        <span id="conn" class="conn" title="connecting…"></span>
       </div>
     </header>
     <main>
       <div id="left">
         <div id="stage"><canvas id="office"></canvas></div>
-        <div id="timeline" aria-label="Zeitleiste"></div>
+        <div id="timeline" aria-label="Timeline"></div>
       </div>
       <aside>
         <div id="agents"></div>

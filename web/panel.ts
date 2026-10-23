@@ -70,7 +70,7 @@ function feedIcon(f: FeedEntry): IconName {
     case "ask":
       return "question";
     default:
-      return f.text === "fertig" ? "check" : "gear";
+      return f.text === "done" ? "check" : "gear";
   }
 }
 
@@ -132,7 +132,7 @@ export class Panel {
       b.onclick = () => this.cb.selectRoom(r.id);
       return b;
     });
-    swap(this.tabs, nodes.length ? nodes : [el("span", "muted", "keine Sessions")]);
+    swap(this.tabs, nodes.length ? nodes : [el("span", "muted", "no sessions")]);
   }
 
   private renderList(roomId: string | undefined, selected?: string) {
@@ -152,13 +152,13 @@ export class Panel {
     walk(undefined, 0);
     const head = el("div", "list-head");
     const busy = agents.filter((a) => a.status === "busy" || a.status === "retry").length;
-    head.append(el("span", "", "Aufträge"), el("span", "muted-inline", `${busy} aktiv · ${agents.length} gesamt`));
-    const nodes: HTMLElement[] = [head, ...(rows.length ? rows : [el("div", "muted", "Gerade keine Aufträge.")])];
+    head.append(el("span", "", "Assignments"), el("span", "muted-inline", `${busy} active · ${agents.length} total`));
+    const nodes: HTMLElement[] = [head, ...(rows.length ? rows : [el("div", "muted", "No assignments right now.")])];
 
     const off = this.cb.roster().filter((p) => !p.agentId);
     if (off.length) {
       const h2 = el("div", "list-head");
-      h2.append(el("span", "", "In der Pause"), el("span", "muted-inline", String(off.length)));
+      h2.append(el("span", "", "On a break"), el("span", "muted-inline", String(off.length)));
       nodes.push(h2);
       const grid = el("div", "breakroom");
       for (const p of off) {
@@ -187,10 +187,10 @@ export class Panel {
     main.append(top);
     const live = a.tool && (a.tool.state === "running" || a.tool.state === "pending");
     const sub = el("span", "sub");
-    if (a.waiting) sub.append(img(iconURL("question"), "ico"), document.createTextNode(a.ask?.title ?? "wartet auf Freigabe / Antwort"));
+    if (a.waiting) sub.append(img(iconURL("question"), "ico"), document.createTextNode(a.ask?.title ?? "waiting for approval / an answer"));
     else if (live) sub.append(img(iconURL(toolIcon(a.tool!.name)), "ico"), document.createTextNode(`${a.tool!.name} · ${a.tool!.title}`));
     else if (a.snippet && a.status === "busy") sub.append(img(iconURL(a.snippet.kind === "think" ? "think" : "speech"), "ico"), document.createTextNode(a.snippet.text));
-    else sub.append(document.createTextNode(`${fmtTokens(a.tokens)} Tokens${a.edits ? ` · ${a.edits} Änderungen` : ""}`));
+    else sub.append(document.createTextNode(`${fmtTokens(a.tokens)} tokens${a.edits ? ` · ${a.edits} edits` : ""}`));
     main.append(sub);
     r.append(main);
     r.onclick = () => this.cb.select(selected ? undefined : a.id);
@@ -204,26 +204,26 @@ export class Panel {
     head.append(img(avatarURL(p.look), "avatar big", p.name));
     const names = el("div", "d-names");
     const line = el("div", "d-line");
-    line.append(el("strong", "", p.name), pill("idle", p.temp ? "Aushilfe" : "Team"));
+    line.append(el("strong", "", p.name), pill("idle", p.temp ? "temp" : "team"));
     names.append(line, el("span", "role", roleLabel(p.team)));
     head.append(names);
     const now = el("div", "current completed");
-    now.append(img(iconURL("zzz"), "ico"), el("strong", "", "Gerade"), el("span", "", p.status));
+    now.append(img(iconURL("zzz"), "ico"), el("strong", "", "Now"), el("span", "", p.status));
     const stats = el("div", "stats");
     const s1 = el("div", "stat");
-    s1.append(el("span", "k", "Erledigt"), el("span", "v", `${p.done} Aufträge`));
+    s1.append(el("span", "k", "Done"), el("span", "v", `${p.done} assignments`));
     const s2 = el("div", "stat");
     s2.append(el("span", "k", "Team"), el("span", "v", p.team));
     stats.append(s1, s2);
     const secs = sections(this.detail, 4);
-    swap(secs[0], [head, now, stats, el("div", "muted hint-p", "Bekommt den nächsten passenden Auftrag vom Chef.")]);
+    swap(secs[0], [head, now, stats, el("div", "muted hint-p", "Gets the next matching assignment from the boss.")]);
     for (const sec of secs.slice(1)) swap(sec, []);
   }
 
   private renderDetail(a?: Agent) {
     if (!a) {
       const hint = el("div", "hint");
-      hint.append(img(iconURL("magnifier"), "ico"), document.createTextNode("Figur, Schreibtisch oder Eintrag anklicken für Details."));
+      hint.append(img(iconURL("magnifier"), "ico"), document.createTextNode("Click a person, a desk or a row for details."));
       const secs = sections(this.detail, 4);
       swap(secs[0], [hint]);
       for (const sec of secs.slice(1)) swap(sec, []);
@@ -235,7 +235,7 @@ export class Panel {
     const names = el("div", "d-names");
     const line = el("div", "d-line");
     line.append(el("strong", "", worker?.name ?? a.name), pill(statusKey(a)));
-    names.append(line, el("span", "role", `${roleLabel(a.name)} · Agent „${a.name}“`));
+    names.append(line, el("span", "role", `${roleLabel(a.name)} · agent "${a.name}"`));
     head.append(names);
     const [secHead, secAsk, secInfo, secFeed] = sections(this.detail, 4);
     const headParts: HTMLElement[] = [head];
@@ -258,9 +258,9 @@ export class Panel {
       stats.append(s);
     };
     stat("Tokens", fmtTokens(a.tokens));
-    stat("Kosten", a.cost ? "$" + a.cost.toFixed(4) : "–");
-    stat("Modell", a.model ?? "–");
-    stat("Aktiv seit", fmtAge(this.state.age(a.createdAt)));
+    stat("Cost", a.cost ? "$" + a.cost.toFixed(4) : "–");
+    stat("Model", a.model ?? "–");
+    stat("Running for", fmtAge(this.state.age(a.createdAt)));
     parts.push(stats);
 
     if (a.tool) {
@@ -271,7 +271,7 @@ export class Panel {
 
     if (a.files.length) {
       const box = el("div", "files");
-      box.append(el("h4", "", `Papierstapel · ${a.edits} Änderungen`));
+      box.append(el("h4", "", `Paper stack · ${a.edits} edits`));
       for (const f of [...a.files].reverse()) {
         const row = el("div", "file");
         const parts2 = f.split(/[\\/]/);
@@ -304,13 +304,13 @@ export class Panel {
 
     const feed = this.state.feeds.get(a.id) ?? [];
     const fb = el("div", "feed");
-    fb.append(el("h4", "", "Aktivität"));
+    fb.append(el("h4", "", "Activity"));
     for (const f of feed.slice(-120).reverse()) {
       const row = el("div", "f " + f.kind);
       row.append(el("span", "t", fmtAge(this.state.age(f.ts))), img(iconURL(feedIcon(f)), "ico"), el("span", "x", f.text));
       fb.append(row);
     }
-    if (!feed.length) fb.append(el("div", "muted", "noch nichts"));
+    if (!feed.length) fb.append(el("div", "muted", "nothing yet"));
     swap(secFeed, [fb]);
   }
 
@@ -318,7 +318,7 @@ export class Panel {
     const ask = a.ask!;
     const box = el("div", "ask " + ask.kind);
     const h = el("div", "ask-head");
-    h.append(img(iconURL("question"), "ico"), el("strong", "", ask.kind === "permission" ? "Freigabe nötig" : "Rückfrage"));
+    h.append(img(iconURL("question"), "ico"), el("strong", "", ask.kind === "permission" ? "Approval needed" : "Question"));
     box.append(h, el("div", "ask-title", ask.title));
     if (ask.detail) box.append(el("code", "ask-detail", ask.detail));
     if (ask.options?.length) {
@@ -332,15 +332,15 @@ export class Panel {
       const btns = el("div", "ask-btns");
       const mk = (label: string, decision: "once" | "always" | "reject", cls: string) => {
         const b = el("button", "btn " + cls, label);
-        b.onclick = () => this.run(a.id, { action: "permission", sessionID: a.id, requestID: ask.id!, decision }, "Antwort gesendet");
+        b.onclick = () => this.run(a.id, { action: "permission", sessionID: a.id, requestID: ask.id!, decision }, "reply sent");
         return b;
       };
-      btns.append(mk("Einmal erlauben", "once", "ok"), mk("Immer erlauben", "always", "ok2"), mk("Ablehnen", "reject", "no"));
+      btns.append(mk("Allow once", "once", "ok"), mk("Always allow", "always", "ok2"), mk("Reject", "reject", "no"));
       box.append(btns);
     } else if (ask.kind === "question") {
-      box.append(el("div", "muted-inline", "Fragen bitte im Terminal beantworten – die Plugin-API kann keine Antworten senden."));
+      box.append(el("div", "muted-inline", "Please answer questions in the terminal – the plugin API cannot send answers."));
     } else if (!caps.control) {
-      box.append(el("div", "muted-inline", `Steuerung aus: ${caps.reason ?? "nicht verfügbar"}`));
+      box.append(el("div", "muted-inline", `Controls off: ${caps.reason ?? "not available"}`));
     }
     if (feedback) box.append(el("div", feedback.error ? "fb err" : "fb", feedback.text));
     return box;
@@ -351,14 +351,14 @@ export class Panel {
     if (!caps.control || !(a.status === "busy" || a.status === "retry" || a.waiting)) return;
     const armed = (this.actions.get(a.id)?.armedStop ?? 0) > Date.now();
     const wrap = el("div", "ctl");
-    const b = el("button", "btn no" + (armed ? " armed" : ""), armed ? "Wirklich stoppen?" : "■ Stopp");
+    const b = el("button", "btn no" + (armed ? " armed" : ""), armed ? "Really stop?" : "■ Stop");
     b.onclick = () => {
       if (!armed) {
         this.actions.set(a.id, { text: "", armedStop: Date.now() + 3000 });
         this.render(a.roomId, a.id);
         return;
       }
-      this.run(a.id, { action: "interrupt", sessionID: a.id }, "Stopp gesendet");
+      this.run(a.id, { action: "interrupt", sessionID: a.id }, "stop sent");
     };
     wrap.append(b);
     const fb = this.actions.get(a.id);
@@ -367,10 +367,10 @@ export class Panel {
   }
 
   private run(id: string, req: ControlRequest, okText: string) {
-    this.actions.set(id, { text: "sende…" });
+    this.actions.set(id, { text: "sending…" });
     this.cb
       .control(req)
       .then(() => this.actions.set(id, { text: okText }))
-      .catch((err) => this.actions.set(id, { text: `Fehler: ${String(err).slice(0, 120)}`, error: true }));
+      .catch((err) => this.actions.set(id, { text: `Error: ${String(err).slice(0, 120)}`, error: true }));
   }
 }

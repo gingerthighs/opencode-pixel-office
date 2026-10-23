@@ -36,11 +36,11 @@ const conn = $<HTMLElement>("conn");
 
 // control requests must echo the per-process nonce the server put into this page
 const nonce = document.querySelector('meta[name="po-nonce"]')?.getAttribute("content") ?? "";
-let caps: { control: boolean; reason?: string } = { control: false, reason: "lädt…" };
+let caps: { control: boolean; reason?: string } = { control: false, reason: "loading…" };
 fetch("api/caps")
   .then((r) => r.json())
   .then((c) => (caps = c))
-  .catch(() => (caps = { control: false, reason: "nicht erreichbar" }));
+  .catch(() => (caps = { control: false, reason: "unreachable" }));
 
 async function control(req: ControlRequest) {
   const res = await fetch("api/control", {
@@ -156,13 +156,13 @@ function connect() {
     state.load(JSON.parse((e as MessageEvent).data) as Snapshot);
     scene.reset();
     conn.className = "conn ok";
-    conn.title = "verbunden";
+    conn.title = "connected";
     dirty = true;
   });
   es.addEventListener("ops", (e) => state.apply(JSON.parse((e as MessageEvent).data) as Op[]));
   es.onerror = () => {
     conn.className = "conn bad";
-    conn.title = "getrennt – verbinde neu…";
+    conn.title = "disconnected – reconnecting…";
   };
 }
 

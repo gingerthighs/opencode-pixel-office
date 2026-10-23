@@ -6,9 +6,25 @@ export interface Config {
   port: number;
   host: string;
   token?: string;
+  /** host names accepted without a token besides loopback and IP addresses */
+  allowedHosts: string[];
+  /** write event samples to the opencode log dir (contains snippets of prompts and commands) */
+  debug: boolean;
 }
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+
+const list = (v: unknown): string[] | undefined => {
+  if (Array.isArray(v)) return v.map(String).map((s) => s.trim()).filter(Boolean);
+  const s = str(v);
+  return s ? s.split(",").map((x) => x.trim()).filter(Boolean) : undefined;
+};
+
+const flag = (v: unknown): boolean | undefined => {
+  if (typeof v === "boolean") return v;
+  const s = str(v)?.toLowerCase();
+  return s === undefined ? undefined : ["1", "true", "yes", "on"].includes(s);
+};
 
 /** opencode's config dir on every OS: $XDG_CONFIG_HOME/opencode, else ~/.config/opencode */
 export function opencodeConfigDir(env: Record<string, string | undefined> = process.env): string {
@@ -42,5 +58,7 @@ export function loadConfig(
     port: Number.isInteger(port) && port > 0 && port < 65536 ? port : 4777,
     host: str(env.PIXEL_OFFICE_HOST) ?? str(opts.host) ?? str(file.host) ?? "127.0.0.1",
     token: str(env.PIXEL_OFFICE_TOKEN) ?? str(opts.token) ?? str(file.token),
+    allowedHosts: list(env.PIXEL_OFFICE_ALLOWED_HOSTS) ?? list(opts.allowedHosts) ?? list(file.allowedHosts) ?? [],
+    debug: flag(env.PIXEL_OFFICE_DEBUG) ?? flag(opts.debug) ?? flag(file.debug) ?? false,
   };
 }

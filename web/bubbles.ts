@@ -23,8 +23,8 @@ export interface Box {
 }
 
 export function bubbleFor(a: Agent, state: ClientState, focused: boolean): BubbleContent | undefined {
-  if (a.waiting) return { icon: "question", text: "braucht Freigabe / Antwort", tone: "warn" };
-  if (a.status === "error") return { icon: "alert", text: "Fehler", tone: "error" };
+  if (a.waiting) return { icon: "question", text: "needs approval / an answer", tone: "warn" };
+  if (a.status === "error") return { icon: "alert", text: "error", tone: "error" };
   const tool = a.tool;
   const toolLive = tool && (tool.state === "running" || tool.state === "pending" || state.age(tool.at) < TOOL_LINGER);
   const snip = a.snippet;
@@ -37,8 +37,8 @@ export function bubbleFor(a: Agent, state: ClientState, focused: boolean): Bubbl
     if (snipLive) return { icon: snip!.kind === "think" ? "think" : "speech", text: snip!.text, tone: snip!.kind === "think" ? "think" : "normal" };
   }
   if (focused) {
-    if (a.status === "done") return { icon: "check", text: "fertig", tone: "normal" };
-    if (a.status === "idle") return { icon: "zzz", text: "wartet auf Input", tone: "normal" };
+    if (a.status === "done") return { icon: "check", text: "done", tone: "normal" };
+    if (a.status === "idle") return { icon: "zzz", text: "waiting for input", tone: "normal" };
     if (tool) return { icon: toolIcon(tool.name), text: tool.title || tool.name, tone: "normal" };
   }
 }

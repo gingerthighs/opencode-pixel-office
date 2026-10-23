@@ -140,7 +140,7 @@ export class Store {
           this.onError(p, ops);
           break;
         case "session.compacted":
-          if (p.sessionID) this.log(this.ensure(p.sessionID, ops), "status", "Kontext komprimiert", ops);
+          if (p.sessionID) this.log(this.ensure(p.sessionID, ops), "status", "context compacted", ops);
           break;
         case "message.updated":
           this.onMessage(p.info, ops);
@@ -155,7 +155,7 @@ export class Store {
         case "permission.asked": {
           if (!p.sessionID) break;
           const pats: unknown[] = Array.isArray(p.patterns) ? p.patterns : p.pattern ? [p.pattern].flat() : [];
-          const title = String(p.title ?? p.permission ?? p.type ?? "Freigabe");
+          const title = String(p.title ?? p.permission ?? p.type ?? "permission");
           const detail = pats.length ? head(pats.map(String).join(", "), 200) : undefined;
           this.setWaiting(p.sessionID, true, title, ops, { kind: "permission", id: str(p.id) ?? str(p.requestID), title, detail });
           break;
@@ -163,7 +163,7 @@ export class Store {
         case "question.asked": {
           if (!p.sessionID) break;
           const q = Array.isArray(p.questions) ? p.questions[0] : undefined;
-          const title = String(p.title ?? q?.question ?? q?.header ?? "Frage");
+          const title = String(p.title ?? q?.question ?? q?.header ?? "question");
           const raw = p.options ?? q?.options;
           const options = Array.isArray(raw) ? raw.map((o: any) => String(o?.label ?? o)).filter(Boolean).slice(0, 8) : undefined;
           this.setWaiting(p.sessionID, true, title, ops, { kind: "question", id: str(p.id) ?? str(p.requestID), title, options });
@@ -305,7 +305,7 @@ export class Store {
 
     if (fresh && parentId && created) {
       const parent = this.entries.get(parentId);
-      if (parent) this.log(parent, "spawn", `→ @${e.agent.name} gestartet`, ops);
+      if (parent) this.log(parent, "spawn", `→ @${e.agent.name} started`, ops);
       ops.push({ op: "delegate", from: parentId, to: info.id, label: e.agent.name });
     }
     return e;
@@ -342,12 +342,12 @@ export class Store {
     a.status = next;
     if (next === "done") {
       a.doneAt = this.clock();
-      this.log(e, "status", "fertig", ops);
+      this.log(e, "status", "done", ops);
     } else {
       a.doneAt = undefined;
     }
     if (next === "retry") this.log(e, "status", msg ? `Retry: ${head(String(msg), 100)}` : "Retry", ops);
-    if (next === "busy" && prev === "done") this.log(e, "status", "wieder aktiv", ops);
+    if (next === "busy" && prev === "done") this.log(e, "status", "active again", ops);
     this.emit(e, ops);
   }
 
@@ -355,7 +355,7 @@ export class Store {
     const e = this.ensure(id, ops);
     const a = e.agent;
     if (a.waiting === waiting && !ask) return;
-    if (waiting && (!a.waiting || ask?.id !== a.ask?.id)) this.log(e, "ask", `wartet: ${head(what, 120)}`, ops);
+    if (waiting && (!a.waiting || ask?.id !== a.ask?.id)) this.log(e, "ask", `waiting: ${head(what, 120)}`, ops);
     a.waiting = waiting;
     a.ask = waiting ? ask : undefined;
     this.emit(e, ops);
@@ -366,11 +366,11 @@ export class Store {
     const e = this.ensure(p.sessionID, ops);
     const err = p.error ?? {};
     if (err.name === "MessageAbortedError") {
-      this.log(e, "status", "abgebrochen", ops);
+      this.log(e, "status", "aborted", ops);
       this.setStatus(p.sessionID, "idle", ops);
       return;
     }
-    const msg = err.data?.message ?? err.message ?? err.name ?? "Fehler";
+    const msg = err.data?.message ?? err.message ?? err.name ?? "error";
     this.log(e, "error", head(String(msg), 200), ops);
     if (e.agent.status !== "error") {
       e.agent.status = "error";
@@ -485,7 +485,7 @@ export class Store {
       this.log(e, "tool", `${name}${title ? " · " + head(String(title), 120) : ""}`, ops);
     }
     if (state === "error" && this.markSeen(e, "e:" + key)) {
-      this.log(e, "error", `${name}: ${head(String(st.error ?? "Fehler"), 160)}`, ops);
+      this.log(e, "error", `${name}: ${head(String(st.error ?? "error"), 160)}`, ops);
     }
     this.emit(e, ops, !changed);
   }
@@ -503,7 +503,7 @@ export class Store {
     const summary = `${done}/${e.agent.todos.length}`;
     if (summary !== e.todoSummary) {
       e.todoSummary = summary;
-      this.log(e, "todo", `Todos ${summary} erledigt`, ops);
+      this.log(e, "todo", `todos ${summary} done`, ops);
     }
     this.emit(e, ops);
   }

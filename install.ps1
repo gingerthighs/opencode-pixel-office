@@ -9,8 +9,8 @@ Set-Location -Path $PSScriptRoot
 
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) {
-  Write-Host "✖ Node.js >= 22.18 wird benötigt (nur zum Bauen): https://nodejs.org" -ForegroundColor Red
-  Write-Host "  oder: winget install OpenJS.NodeJS.LTS"
+  Write-Host "✖ Node.js >= 22.18 is required (for building only): https://nodejs.org" -ForegroundColor Red
+  Write-Host "  or: winget install OpenJS.NodeJS.LTS"
   exit 1
 }
 
@@ -19,12 +19,12 @@ $parts = $version.Split(".")
 $major = [int]$parts[0]
 $minor = [int]$parts[1]
 if ($major -lt 22 -or ($major -eq 22 -and $minor -lt 18)) {
-  Write-Host "✖ Node $version ist zu alt – benötigt wird >= 22.18 (führt TypeScript direkt aus)." -ForegroundColor Red
+  Write-Host "✖ Node $version is too old – >= 22.18 is required (it runs TypeScript directly)." -ForegroundColor Red
   exit 1
 }
 
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-  Write-Host "✖ npm fehlt (kommt normalerweise mit Node.js)." -ForegroundColor Red
+  Write-Host "✖ npm is missing (it normally ships with Node.js)." -ForegroundColor Red
   exit 1
 }
 

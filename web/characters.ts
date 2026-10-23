@@ -16,15 +16,15 @@ export type Phase = "idle" | "fetch" | "toDesk" | "work" | "deliver" | "leave";
 export type Activity = "coffee" | "sofa" | "beanbag" | "arcade" | "pingpong" | "phone" | "pc" | "cat" | "wander";
 
 export const ACTIVITY_LABEL: Record<Activity, string> = {
-  coffee: "Kaffeepause",
-  sofa: "schaut fern",
-  beanbag: "chillt im Sitzsack",
-  arcade: "zockt am Automaten",
-  pingpong: "spielt Tischtennis",
-  phone: "am Handy",
-  pc: "surft im Netz",
-  cat: "streichelt die Katze",
-  wander: "vertritt sich die Beine",
+  coffee: "coffee break",
+  sofa: "watching TV",
+  beanbag: "chilling on a beanbag",
+  arcade: "playing arcade games",
+  pingpong: "playing ping-pong",
+  phone: "on the phone",
+  pc: "browsing the web",
+  cat: "petting the cat",
+  wander: "stretching their legs",
 };
 
 const ACTIVITY_WEIGHTS: [Activity, number][] = [
@@ -147,11 +147,11 @@ export class Person {
 
   /** what to show when hovering an off-duty person */
   get statusText(): string {
-    if (this.phase === "fetch") return "holt einen Auftrag";
-    if (this.phase === "toDesk") return "geht an den Schreibtisch";
-    if (this.phase === "deliver") return "bringt den Bericht zum Chef";
-    if (this.phase === "leave") return "geht nach Hause";
-    return this.activity ? ACTIVITY_LABEL[this.activity] : "Pause";
+    if (this.phase === "fetch") return "picking up an assignment";
+    if (this.phase === "toDesk") return "heading to the desk";
+    if (this.phase === "deliver") return "taking the report to the boss";
+    if (this.phase === "leave") return "going home";
+    return this.activity ? ACTIVITY_LABEL[this.activity] : "on a break";
   }
 
   // ---------- placement & movement ----------

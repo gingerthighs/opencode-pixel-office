@@ -61,7 +61,7 @@ export class Timeline {
       row.append(who, lane);
       rows.push(row);
     }
-    if (items.length === 0) rows.push(el("div", "muted", "Noch keine Aktivität in diesem Raum."));
+    if (items.length === 0) rows.push(el("div", "muted", "No activity in this room yet."));
     this.root.replaceChildren(...rows);
   }
 }

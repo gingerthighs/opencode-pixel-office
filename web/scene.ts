@@ -145,7 +145,7 @@ export class Scene {
     const p = key.startsWith("p:") ? this.people.get(key.slice(2)) : this.byAgent.get(key);
     if (!p) {
       const c = this.credits.get(key);
-      return c && { key, ...c, status: "Auftrag abgegeben", done: 0, agentId: key };
+      return c && { key, ...c, status: "handed in the report", done: 0, agentId: key };
     }
     return { key, name: p.name, team: p.team, temp: p.temp, status: p.statusText, done: p.done, agentId: p.agentId, look: p.look };
   }
@@ -405,7 +405,7 @@ export class Scene {
     this.lighting(g, dyn, t);
 
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (!this.roomId) this.empty(g, "Noch keine Session – starte etwas in opencode.");
+    if (!this.roomId) this.empty(g, "No session yet – start something in opencode.");
     this.overlays(g, people);
     this.floorBadge(g);
   }
@@ -529,7 +529,7 @@ export class Scene {
       const focused = key === this.selected || key === this.hovered;
       let b: BubbleContent | undefined;
       if (a) b = bubbleFor(a, this.state, focused);
-      if (!b && (p.carrying || p.phase === "fetch")) b = { icon: "paper", text: p.carrying === "report" ? "Bericht für den Chef" : "neuer Auftrag", tone: "normal" };
+      if (!b && (p.carrying || p.phase === "fetch")) b = { icon: "paper", text: p.carrying === "report" ? "report for the boss" : "new assignment", tone: "normal" };
       if (!b && focused && !a) b = { icon: p.activity ? ACTIVITY_ICON[p.activity] : "zzz", text: p.statusText, tone: "normal" };
       const bubble = b ? measureBubble(g, b, focused ? 300 : 220) : undefined;
       const working = !!a && (a.status === "busy" || a.status === "retry" || a.waiting || a.status === "error");
@@ -610,7 +610,7 @@ export class Scene {
     }
     const floors = this.floors();
     const idx = floors.findIndex((f) => f.dir === room.directory);
-    const text = `Etage ${idx + 1} · ${basename(room.directory) || "—"}`;
+    const text = `Floor ${idx + 1} · ${basename(room.directory) || "—"}`;
     g.font = `12px ${FONT}`;
     const w = Math.ceil(g.measureText(text).width) + 34;
     const x = 8;
@@ -691,7 +691,7 @@ export class Scene {
     if (!floors.length) {
       g.fillStyle = "#f1ecff";
       g.font = `14px ${FONT}`;
-      g.fillText("Noch keine Etagen – starte eine Session.", bx + 20, by + bh / 2);
+      g.fillText("No floors yet – start a session.", bx + 20, by + bh / 2);
     }
     const current = this.roomId ? this.state.rooms.get(this.roomId) : undefined;
     floors.forEach((f, i) => {
@@ -743,7 +743,7 @@ export class Scene {
     });
     g.fillStyle = "#f1ecff";
     g.font = `12px ${FONT}`;
-    g.fillText("Büro anklicken zum Hinfahren", bx, by + bh + 12 > ch - 30 ? 20 : by + bh + 12);
+    g.fillText("Click an office to take the elevator there", bx, by + bh + 12 > ch - 30 ? 20 : by + bh + 12);
   }
 
   private drawElevator(g: CanvasRenderingContext2D) {

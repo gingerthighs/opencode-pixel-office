@@ -3,7 +3,7 @@
 
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_FILE, opencodeConfigDir } from "../src/config.ts";
@@ -40,7 +40,7 @@ function parse(argv: string[]): Args {
     const k = argv[i].replace(/^-{1,2}/, "").toLowerCase();
     const next = () => {
       const v = argv[++i];
-      if (v === undefined) fail(`--${k} braucht einen Wert`);
+      if (v === undefined) fail(`--${k} needs a value`);
       return v;
     };
     switch (k) {
@@ -49,7 +49,7 @@ function parse(argv: string[]): Args {
         break;
       case "port": {
         const p = Number(next());
-        if (!Number.isInteger(p) || p < 1 || p > 65535) fail("--port muss zwischen 1 und 65535 liegen");
+        if (!Number.isInteger(p) || p < 1 || p > 65535) fail("--port must be between 1 and 65535");
         a.port = p;
         break;
       }
@@ -74,7 +74,7 @@ function parse(argv: string[]): Args {
         console.log(HELP);
         process.exit(0);
       default:
-        fail(`Unbekannte Option: ${argv[i]}\n\n${HELP}`);
+        fail(`Unknown option: ${argv[i]}\n\n${HELP}`);
     }
   }
   return a;
@@ -102,15 +102,15 @@ const configFile = join(configDir, CONFIG_FILE);
 if (args.uninstall) {
   if (existsSync(target)) {
     rmSync(target);
-    ok(`entfernt: ${target}`);
+    ok(`removed: ${target}`);
   } else {
-    console.log(`– nichts zu entfernen in ${pluginDir}`);
+    console.log(`– nothing to remove in ${pluginDir}`);
   }
   if (args.purge && existsSync(configFile)) {
     rmSync(configFile);
-    ok(`entfernt: ${configFile}`);
+    ok(`removed: ${configFile}`);
   }
-  console.log("opencode lädt Plugins beim nächsten Start neu (2.x merkt das Löschen auch im laufenden Betrieb).");
+  console.log("opencode picks this up on its next start (2.x also notices while running).");
   process.exit(0);
 }
 
@@ -118,19 +118,19 @@ if (args.uninstall) {
 const dist = join(ROOT, "dist", PLUGIN);
 if (!args.skipBuild) {
   if (!existsSync(join(ROOT, "node_modules", "esbuild"))) {
-    step("installiere Build-Abhängigkeiten (npm ci)");
+    step("installing build dependencies (npm ci)");
     // npm is a .cmd shim on Windows, which only runs through a shell
     run("npm", existsSync(join(ROOT, "package-lock.json")) ? ["ci", "--no-audit", "--no-fund"] : ["install", "--no-audit", "--no-fund"], process.platform === "win32");
   }
-  step("baue dist/" + PLUGIN);
+  step("building dist/" + PLUGIN);
   run(process.execPath, ["build.ts"]);
 }
-if (!existsSync(dist)) fail(`dist/${PLUGIN} fehlt – ohne --skip-build erneut ausführen`);
+if (!existsSync(dist)) fail(`dist/${PLUGIN} is missing – run again without --skip-build`);
 
 // 2. install
 mkdirSync(pluginDir, { recursive: true });
 copyFileSync(dist, target);
-ok(`Plugin installiert: ${target}`);
+ok(`plugin installed: ${target}`);
 
 // 3. settings → pixel-office.json (env vars from shells don't reach opencode's background service)
 const settings: Record<string, unknown> = {};
@@ -146,13 +146,15 @@ try {
 const merged = { ...current, ...settings };
 if (Object.keys(settings).length) {
   mkdirSync(configDir, { recursive: true });
-  writeFileSync(configFile, JSON.stringify(merged, null, 2) + "\n");
-  ok(`Einstellungen gespeichert: ${configFile}`);
+  // the file may hold the access token: readable by you only (mode only applies on macOS/Linux)
+  writeFileSync(configFile, JSON.stringify(merged, null, 2) + "\n", { mode: 0o600 });
+  chmodSync(configFile, 0o600);
+  ok(`settings saved: ${configFile}`);
 }
 
 // 4. sanity checks + next steps
 const which = spawnSync(process.platform === "win32" ? "where" : "which", ["opencode"], { encoding: "utf8" });
-if (which.status !== 0) console.log("! opencode wurde nicht im PATH gefunden – das Plugin wird aktiv, sobald opencode läuft.");
+if (which.status !== 0) console.log("! opencode was not found on PATH – the plugin becomes active once opencode runs.");
 
 const port = Number(merged.port ?? 4777);
 const host = String(merged.host ?? "127.0.0.1");
@@ -161,7 +163,7 @@ const token = typeof merged.token === "string" ? merged.token : undefined;
 console.log("");
 console.log(`  Pixel Office:  http://${shownHost}:${port}/${token ? `?token=${token}` : ""}`);
 console.log("");
-console.log("  opencode 2.x lädt die Datei automatisch neu; bei 1.x opencode einmal neu starten.");
+console.log("  opencode 2.x reloads the file automatically; with 1.x restart opencode once.");
 if ((host === "0.0.0.0" || host === "::") && !token) {
-  console.log("  ⚠ Ohne Token sieht jeder im Netz Prompts, Dateinamen und Befehle – besser --token auto.");
+  console.log("  ⚠ Without a token anyone on the network sees prompts, file names and commands – use --token auto.");
 }

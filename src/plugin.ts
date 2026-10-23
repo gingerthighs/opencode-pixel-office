@@ -4,9 +4,9 @@
 import type { Plugin, PluginInput } from "@opencode-ai/plugin";
 import { HTML, JS } from "./assets.generated.ts";
 import { loadConfig, type Config } from "./config.ts";
-import { Hub, type Controller } from "./server.ts";
+import { Hub, INGEST_HEADER, type Controller } from "./server.ts";
 import { Store, type BusEvent } from "./store.ts";
-import { sample, toolEvent, V2Mapper } from "./v2.ts";
+import { sample, setSampling, toolEvent, V2Mapper } from "./v2.ts";
 
 const KEY = Symbol.for("opencode-pixel-office");
 const SEED_WINDOW = 2 * 60 * 60 * 1000;
@@ -43,13 +43,13 @@ class Instance {
       this.hub = hub;
       hub.setController((req) => this.dispatch(req));
       const shown = this.cfg.host === "0.0.0.0" || this.cfg.host === "::" ? "<server-ip>" : this.cfg.host;
-      this.log("info", `Pixel Office läuft: http://${shown}:${this.cfg.port}/${this.cfg.token ? "?token=…" : ""}`);
+      this.log("info", `Pixel Office running: http://${shown}:${this.cfg.port}/${this.cfg.token ? "?token=…" : ""}`);
       if (!this.cfg.token && this.cfg.host !== "127.0.0.1" && this.cfg.host !== "localhost") {
-        this.log("warn", "Pixel Office ohne PIXEL_OFFICE_TOKEN auf allen Interfaces erreichbar – nur in vertrauenswürdigen Netzen (LAN/Tailscale) nutzen.");
+        this.log("warn", "Pixel Office is reachable on all interfaces without PIXEL_OFFICE_TOKEN – only use this on trusted networks (LAN/Tailscale).");
       }
     } catch (err) {
       if ((err as { code?: string }).code !== "EADDRINUSE") throw err;
-      this.log("info", `Port ${this.cfg.port} belegt – leite Events an bestehendes Pixel Office weiter.`);
+      this.log("info", `Port ${this.cfg.port} is taken – forwarding events to the running Pixel Office.`);
     }
   }
 
@@ -63,7 +63,7 @@ class Instance {
 
   private async dispatch(req: Parameters<Controller>[0]) {
     const c = this.controllers.at(-1);
-    if (!c) throw new Error("keine Steuerung verfügbar");
+    if (!c) throw new Error("no controls available");
     await c(req);
   }
 
@@ -97,7 +97,7 @@ class Instance {
         if (keep.has(id)) this.ingest({ type: "session.status", properties: { sessionID: id, status } });
       }
     } catch (err) {
-      this.log("warn", `Pixel Office: Session-Snapshot fehlgeschlagen: ${String(err)}`);
+      this.log("warn", `Pixel Office: session snapshot failed: ${String(err)}`);
     }
   }
 
@@ -117,6 +117,7 @@ class Instance {
         method: "POST",
         headers: {
           "content-type": "application/json",
+          [INGEST_HEADER]: "ingest",
           ...(this.cfg.token ? { authorization: `Bearer ${this.cfg.token}` } : {}),
         },
         body: JSON.stringify({ events }),
@@ -153,7 +154,9 @@ async function acquire(options: Record<string, unknown>, log: Log): Promise<Inst
   g[KEY] ??= {
     build: BUILD,
     instance: (async () => {
-      const inst = new Instance(loadConfig(options), log);
+      const cfg = loadConfig(options);
+      setSampling(cfg.debug);
+      const inst = new Instance(cfg, log);
       await inst.start();
       return inst;
     })(),
@@ -164,7 +167,7 @@ async function acquire(options: Record<string, unknown>, log: Log): Promise<Inst
     return inst;
   } catch (err) {
     g[KEY] = undefined;
-    log("error", `Pixel Office konnte nicht starten: ${String(err)}`);
+    log("error", `Pixel Office could not start: ${String(err)}`);
   }
 }
 
@@ -220,10 +223,10 @@ const setup = async (ctx: any): Promise<() => Promise<void>> => {
   disposers.push(
     inst.addController(async (req) => {
       if (req.action === "interrupt") {
-        if (typeof ctx.session?.interrupt !== "function") throw new Error("session.interrupt fehlt");
+        if (typeof ctx.session?.interrupt !== "function") throw new Error("session.interrupt is not available");
         await ctx.session.interrupt({ sessionID: req.sessionID, resume: false });
       } else {
-        if (typeof ctx.permission?.reply !== "function") throw new Error("permission.reply fehlt");
+        if (typeof ctx.permission?.reply !== "function") throw new Error("permission.reply is not available");
         await ctx.permission.reply({ sessionID: req.sessionID, requestID: req.requestID, decision: req.decision });
       }
     }),
@@ -238,7 +241,7 @@ const setup = async (ctx: any): Promise<() => Promise<void>> => {
       });
       if (reg?.dispose) disposers.push(() => reg.dispose());
     } catch (err) {
-      log("warn", `tool.hook(${phase}) nicht verfügbar: ${String(err)}`);
+      log("warn", `tool.hook(${phase}) not available: ${String(err)}`);
     }
   }
 
@@ -278,7 +281,7 @@ const setup = async (ctx: any): Promise<() => Promise<void>> => {
         }
       }
     } catch (err) {
-      log("warn", `Event-Stream beendet: ${String(err)}`);
+      log("warn", `event stream ended: ${String(err)}`);
     }
   })();
 

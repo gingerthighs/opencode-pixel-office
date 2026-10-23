@@ -2,11 +2,11 @@
 
 # 🏢 opencode Pixel Office
 
-**Schau deinem opencode-Orchestrator und seinen Subagents live bei der Arbeit zu – in einem Pixel-Art-Büro von oben.**
+**Watch your opencode orchestrator and its subagents work live – in a top-down pixel-art office.**
 
-Ein opencode-Plugin, das im selben Prozess einen kleinen Webserver startet und jede Session, jedes Tool und jede
-Delegation als Büroalltag darstellt: Der Chef verteilt Aufträge auf Papier, das Team arbeitet an seinen Schreibtischen,
-und wer nichts zu tun hat, macht Pause in der Lounge.
+An opencode plugin that starts a tiny web server in the same process and turns every session, tool call and
+delegation into office life: the boss hands out assignments on paper, the team works at their desks, and whoever
+has nothing to do takes a break in the lounge.
 
 ![Node](https://img.shields.io/badge/node-%E2%89%A5%2022.18-339933?logo=node.js&logoColor=white)
 ![opencode](https://img.shields.io/badge/opencode-1.x%20%7C%202.x-ffd43b)
@@ -14,58 +14,59 @@ und wer nichts zu tun hat, macht Pause in der Lounge.
 ![Dependencies](https://img.shields.io/badge/runtime%20deps-0-40c057)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
 
-<img src="docs/office-day.png" alt="Pixel Office am Tag: Chefbüro, Bibliothek mit arbeitenden Explorern, Aushilfen am Laptop, Lounge" width="900">
+<img src="docs/office-day.png" alt="Pixel Office by day: boss office, library with explorers at work, a temp on a laptop, the lounge" width="900">
 
 </div>
 
 ---
 
-## Inhalt
+## Contents
 
 - [Features](#-features)
 - [Screenshots](#-screenshots)
 - [Installation](#-installation)
-- [Konfiguration](#-konfiguration)
-- [Das Büro](#-das-büro)
-- [Freigaben & Sicherheit](#-freigaben--sicherheit)
-- [Wie es funktioniert](#-wie-es-funktioniert)
-- [Fehlerbehebung](#-fehlerbehebung)
-- [Entwicklung](#-entwicklung)
+- [Configuration](#-configuration)
+- [The office](#-the-office)
+- [Approvals & security](#-approvals--security)
+- [How it works](#-how-it-works)
+- [Troubleshooting](#-troubleshooting)
+- [Development](#-development)
+- [Licenses](#-licenses)
 
 ## ✨ Features
 
 | | |
 |---|---|
-| 👥 **Festes Team mit Namen** | Otto (Chef), Ella & Emil (Explorer), Lotte (Librarian), Orla (Oracle), Fritz & Frieda (Fixer), Dani (Designer), Rita (Reviewer) – jede:r mit eigenem Schreibtisch. Bei Engpass kommt eine Aushilfe durch die Tür und arbeitet am Laptop. |
-| 📄 **Papierkram** | Auftrag aus der Ablage des Chefs holen → am Schreibtisch bearbeiten (jede Datei-Änderung legt ein Blatt auf den Stapel) → Bericht in den Eingangskorb zurückbringen. |
-| 💬 **Live-Sprechblasen** | Aktuelles Tool mit Pixel-Icon (read, edit, bash, grep, web, task …), gestreamter Text und Denkprozesse. Monitore zeigen Code, Terminal oder Browser. |
-| ☕ **Pausen** | Wer frei hat, trinkt Kaffee, schaut fern, chillt im Sitzsack, zockt, spielt Tischtennis, hängt am Handy, surft oder streichelt die Büro-Katze. |
-| ✋ **Freigaben im UI** | Permission-Requests mit *Einmal / Immer / Ablehnen* beantworten, laufende Agents stoppen. |
-| 🧵 **Fäden & Zeitleiste** | Wer hat wen beauftragt, wer arbeitete wann und wie lange parallel. |
-| 🏢 **Gebäude** | Eine Etage pro Projektordner, ein Büro pro Session, Aufzug dazwischen. |
-| 🌙 **Tag & Nacht** | Nach deiner Uhrzeit, nachts mit Licht von Monitoren, Lampen und Kristallkugel. |
-| 📱 **Überall** | Desktop und Handy, lokal oder im LAN/Tailscale (mit Token). |
+| 👥 **A permanent team with names** | Otto (boss), Ella & Emil (explorers), Lotte (librarian), Orla (oracle), Fritz & Frieda (fixers), Dani (designer), Rita (reviewer) – each with their own desk. When a team is busy, a temp walks in through the door and works on a laptop. |
+| 📄 **Paperwork** | Pick up the assignment from the boss's outbox → work on it at the desk (every file edit adds a page to the stack) → bring the report back to the inbox. |
+| 💬 **Live speech bubbles** | The current tool with a pixel icon (read, edit, bash, grep, web, task …), streamed text and reasoning. Monitors show code, a terminal or a browser. |
+| ☕ **Breaks** | Off-duty staff grab a coffee, watch TV, chill on a beanbag, play arcade games or ping-pong, check their phone, browse the web or pet the office cat. |
+| ✋ **Approvals in the UI** | Answer permission requests with *Allow once / Always allow / Reject* and stop running agents. |
+| 🧵 **Threads & timeline** | Who delegated to whom, who worked when and for how long in parallel. |
+| 🏢 **Building** | One floor per project folder, one office per session, an elevator in between. |
+| 🌙 **Day & night** | Follows your local time; at night lit by monitors, lamps and a crystal ball. |
+| 📱 **Anywhere** | Desktop and phone, local or across your LAN/Tailscale (with a token). |
 
 ## 📸 Screenshots
 
 <table>
   <tr>
-    <td width="66%"><img src="docs/office-night.png" alt="Nachtansicht mit Fäden und Zeitleiste"></td>
-    <td width="34%" rowspan="2"><img src="docs/mobile.png" alt="Mobile Ansicht"></td>
+    <td width="66%"><img src="docs/office-night.png" alt="Night view with threads and timeline"></td>
+    <td width="34%" rowspan="2"><img src="docs/mobile.png" alt="Mobile view"></td>
   </tr>
   <tr>
-    <td><img src="docs/building.png" alt="Gebäude-Ansicht mit Etagen pro Projekt"></td>
+    <td><img src="docs/building.png" alt="Building view with one floor per project"></td>
   </tr>
   <tr>
-    <td><sub>Nachts mit Fäden (wer hat wen beauftragt) und Zeitleiste · darunter: Gebäude mit einer Etage pro Projekt</sub></td>
-    <td><sub>Handy-Ansicht</sub></td>
+    <td><sub>At night with threads (who delegated to whom) and the timeline · below: the building with one floor per project</sub></td>
+    <td><sub>Phone view</sub></td>
   </tr>
 </table>
 
 ## 🚀 Installation
 
-Voraussetzung zum **Bauen**: [Node.js](https://nodejs.org) ≥ 22.18 (führt TypeScript direkt aus). Zur Laufzeit nutzt
-das Plugin die Bun-Runtime von opencode – dort ist nichts weiter nötig.
+To **build** the plugin you need [Node.js](https://nodejs.org) ≥ 22.18 (it runs TypeScript directly). At runtime
+the plugin uses opencode's own Bun runtime – nothing else is required there.
 
 ```bash
 git clone https://github.com/gingerthighs/opencode-pixel-office.git
@@ -87,38 +88,38 @@ cd opencode-pixel-office
 .\install.ps1
 ```
 
-Blockiert die Execution Policy das Skript:
+If the execution policy blocks the script:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 </details>
 
-Das Skript installiert die Build-Abhängigkeiten, baut `dist/pixel-office.js` und kopiert die Datei nach
-`~/.config/opencode/plugins/` (Windows: `%USERPROFILE%\.config\opencode\plugins\`). opencode 2.x lädt sie sofort,
-bei 1.x opencode einmal neu starten. Danach:
+The script installs the build dependencies, builds `dist/pixel-office.js` and copies it to
+`~/.config/opencode/plugins/` (Windows: `%USERPROFILE%\.config\opencode\plugins\`). opencode 2.x loads it right
+away; with 1.x restart opencode once. Then open:
 
 > **http://127.0.0.1:4777/**
 
-### Optionen
+### Options
 
-| Option | Wirkung |
+| Option | Effect |
 |---|---|
-| `--host 0.0.0.0` | im LAN / per Tailscale erreichbar machen |
-| `--token auto` | Zugriff nur mit Token (wird erzeugt und angezeigt) – Pflicht, wenn du `0.0.0.0` nutzt |
-| `--port 4800` | anderer Port |
-| `--project <ordner>` | nur für ein Projekt installieren (`<ordner>/.opencode/plugins`) |
-| `--skip-build` | vorhandenes `dist/pixel-office.js` verwenden |
-| `--uninstall [--purge]` | Plugin entfernen (mit `--purge` auch die Einstellungen) |
+| `--host 0.0.0.0` | make it reachable on your LAN / via Tailscale |
+| `--token auto` | require a token (generated and printed) – mandatory when you use `0.0.0.0` |
+| `--port 4800` | use a different port |
+| `--project <dir>` | install for one project only (`<dir>/.opencode/plugins`) |
+| `--skip-build` | use the existing `dist/pixel-office.js` |
+| `--uninstall [--purge]` | remove the plugin (`--purge` also removes the settings) |
 
-Beispiel für einen Server im Heimnetz:
+Example for a server on your home network:
 
 ```bash
 ./install.sh --host 0.0.0.0 --token auto
 ```
 
 <details>
-<summary>Manuell installieren</summary>
+<summary>Manual installation</summary>
 
 ```bash
 npm ci && npm run build
@@ -126,155 +127,178 @@ cp dist/pixel-office.js ~/.config/opencode/plugins/pixel-office.js
 ```
 </details>
 
-## 🔧 Konfiguration
+## 🔧 Configuration
 
-Einstellungen werden in dieser Reihenfolge gelesen (die erste gewinnt):
+Settings are read in this order (first one wins):
 
-1. Umgebungsvariablen des opencode-Prozesses
-2. Plugin-Optionen in `opencode.json`: `"plugin": [["opencode-pixel-office", { "port": 4777 }]]`
-3. `~/.config/opencode/pixel-office.json` – schreibt der Installer
-4. Standardwerte
+1. Environment variables of the opencode process
+2. Plugin options in `opencode.json`: `"plugin": [["opencode-pixel-office", { "port": 4777 }]]`
+3. `~/.config/opencode/pixel-office.json` – written by the installer
+4. Defaults
 
-| Einstellung | Env-Variable | Standard | |
+| Setting | Env variable | Default | |
 |---|---|---|---|
 | `port` | `PIXEL_OFFICE_PORT` | `4777` | |
-| `host` | `PIXEL_OFFICE_HOST` | `127.0.0.1` | `0.0.0.0` für LAN / Tailscale |
-| `token` | `PIXEL_OFFICE_TOKEN` | – | Aufruf einmal mit `?token=…`, danach merkt sich der Browser das per Cookie |
+| `host` | `PIXEL_OFFICE_HOST` | `127.0.0.1` | `0.0.0.0` for LAN / Tailscale |
+| `token` | `PIXEL_OFFICE_TOKEN` | – | open the URL once with `?token=…`, the browser keeps it in a cookie |
+| `allowedHosts` | `PIXEL_OFFICE_ALLOWED_HOSTS` | `[]` | host names allowed without a token (e.g. `box.tail1234.ts.net`); `localhost` and IP addresses always work |
+| `debug` | `PIXEL_OFFICE_DEBUG` | `false` | write event samples to the opencode log for diagnosis |
 
 ```json
-{ "port": 4777, "host": "0.0.0.0", "token": "dein-geheimer-token" }
+{ "port": 4777, "host": "0.0.0.0", "token": "your-secret-token" }
 ```
 
 > [!TIP]
-> opencode 2.x startet einen **Hintergrund-Service** (`opencode serve --service`), der die Plugins lädt. Umgebungsvariablen,
-> die du erst danach setzt, kommen dort nicht an – deshalb gibt es `pixel-office.json`.
+> opencode 2.x starts a **background service** (`opencode serve --service`) that loads the plugins. Environment
+> variables you set after it started never reach it – that is what `pixel-office.json` is for.
 
-### URL-Parameter
+### URL parameters
 
-Praktisch für Links oder einen zweiten Monitor: `?time=day|night`, `?threads=1`, `?timeline=1`, `?follow=0`, `?view=building`.
+Handy for links or a second screen: `?time=day|night`, `?threads=1`, `?timeline=1`, `?follow=0`, `?view=building`.
 
-## 🗺 Das Büro
+## 🗺 The office
 
 ```
 ┌──────────┬────────┬────────┬──────────────────┐
-│ CHEFBÜRO │ ORAKEL │ REVIEW │    BIBLIOTHEK    │
+│   BOSS   │ ORACLE │ REVIEW │     LIBRARY      │
 │   Otto   │  Orla  │  Rita  │ Ella·Emil·Lotte  │
 ├──────────┴────────┴────────┴──────────────────┤
-│                     FLUR                      │
+│                    HALLWAY                    │
 ├───────────┬─────────────┬──┬──────────────────┤
-│  STUDIO   │  WERKSTATT  │  │    AUSHILFEN     │
-│   Dani    │ Fritz·Frieda│  │    (Laptops)     │
+│  STUDIO   │  WORKSHOP   │  │      TEMPS       │
+│   Dani    │ Fritz·Frieda│  │    (laptops)     │
 ├───────────┼─────────────┤  ├──────────────────┤
-│  KATZEN-  │   SPIEL-    │  │      LOUNGE      │
-│   ECKE    │    ECKE     │  │ TV · Sofa · Küche│
+│   CAT     │    GAME     │  │      LOUNGE      │
+│  CORNER   │    ROOM     │  │ TV·sofa·kitchen  │
 └───────────┴─────────────┴──┴──────────────────┘
-                        Eingang
+                        entrance
 ```
 
-| Agent (opencode / oh-my-opencode) | Team | Raum |
+| Agent (opencode / oh-my-opencode) | Team | Room |
 |---|---|---|
-| `orchestrator`, `sisyphus`, `atlas`, `build`, `plan`, `prometheus` | Chef | Chefbüro |
-| `explorer`, `explore`, `general` | Explorer | Bibliothek |
-| `librarian` | Librarian | Bibliothek |
-| `oracle`, `metis`, `momus`, `council` | Oracle | Orakel |
-| `fixer`, `sisyphus-junior` | Fixer | Werkstatt |
+| `orchestrator`, `sisyphus`, `atlas`, `build`, `plan`, `prometheus` | Boss | Boss office |
+| `explorer`, `explore`, `general` | Explorer | Library |
+| `librarian` | Librarian | Library |
+| `oracle`, `metis`, `momus`, `council` | Oracle | Oracle room |
+| `fixer`, `sisyphus-junior` | Fixer | Workshop |
 | `designer`, `frontend-ui-ux-engineer`, `multimodal-looker`, `document-writer` | Designer | Studio |
 | `reviewer`, `observer` | Reviewer | Review |
-| alles andere / Engpass | Aushilfe | Aushilfen-Raum |
+| anything else / when busy | Temp | Temps room |
 
-Die Haupt-Session jedes Raums übernimmt immer Otto. Subagents gehen an das passende freie Team-Mitglied.
+Otto always takes the main session of a room. Subagents go to the matching free team member.
 
-## 🔐 Freigaben & Sicherheit
+## 🔐 Approvals & security
 
-- Die UI zeigt Prompts, Dateinamen und Befehle. Standardmäßig lauscht sie **nur auf `127.0.0.1`**.
-- Mit `host: 0.0.0.0` bitte immer einen `token` setzen (oder nur hinter Tailscale/VPN betreiben).
-- **Steuern** (Freigaben beantworten, Stopp) läuft über `POST /api/control`:
-  - braucht einen Nonce, den nur die ausgelieferte Seite kennt – fremde Webseiten können nichts auslösen,
-  - ohne Token nur bei Loopback-Bindung und `localhost`-Host-Header (Schutz vor DNS-Rebinding),
-  - im Netz nur mit Token.
-- **Rückfragen** (Fragen des Agents mit Auswahl) werden angezeigt, beantwortet werden sie im Terminal – die
-  Plugin-API von opencode kann keine Antworten senden.
+- The UI shows prompts, file names and commands. By default it listens **on `127.0.0.1` only**.
+- With `host: 0.0.0.0` always set a `token` (or only run it behind Tailscale/a VPN).
+- **DNS-rebinding protection:** without a token the server only answers requests for `localhost`, IP addresses and
+  names in `allowedHosts`. A malicious page that points its own domain at `127.0.0.1` gets `421`.
+- **Controls** (answering approvals, stop) go through `POST /api/control`:
+  - they need a nonce that only the served page knows – other websites cannot trigger anything,
+  - without a token only on a loopback bind with a `localhost` Host header,
+  - over the network only with a token.
+- **Event forwarding** (`POST /api/ingest`, between opencode processes) needs a custom header; browsers can't send
+  it cross-site without a CORS approval, which is never given.
+- **Token file:** the installer creates `pixel-office.json` with mode `600` (readable by you only).
+- **No third parties:** the font is embedded, the page loads nothing from other servers.
+- **Questions** (an agent asking you to pick an option) are shown but answered in the terminal – opencode's plugin
+  API cannot send answers.
 
-## 🧩 Wie es funktioniert
+## 🧩 How it works
 
 ```mermaid
 flowchart LR
-  subgraph opencode["opencode-Prozess (Bun)"]
-    E["Event-Bus<br/>session · tool · text · usage"] --> P["pixel-office.js<br/>Store (Reducer)"]
-    T["Tool-Hooks<br/>execute.before/after"] --> P
+  subgraph opencode["opencode process (Bun)"]
+    E["Event bus<br/>session · tool · text · usage"] --> P["pixel-office.js<br/>store (reducer)"]
+    T["Tool hooks<br/>execute.before/after"] --> P
     P --> S["HTTP + SSE<br/>:4777"]
   end
-  S -- "Snapshot + Diff-Ops" --> B["Browser<br/>Canvas-Büro + Panel"]
-  B -- "POST /api/control<br/>(Freigabe, Stopp)" --> S
+  S -- "snapshot + diff ops" --> B["Browser<br/>canvas office + panel"]
+  B -- "POST /api/control<br/>(approve, stop)" --> S
   S -. "ctx.permission.reply<br/>ctx.session.interrupt" .-> opencode
 ```
 
-- **Ein File, null Dependencies:** `build.ts` bündelt UI und Server per esbuild in `dist/pixel-office.js`.
-- **opencode 1.x und 2.x:** klassische Hooks (`server` → `event`) und die neue `setup(ctx)`-API; v2-Events
-  (`session.execution.*`, `session.tool.*`, `session.text/reasoning.*`, `form.*` …) übersetzt `src/v2.ts`.
-- **Subagents** sind Child-Sessions mit `parentID`; per `task_revive` wiederbelebte werden einmal per
-  `ctx.session.get` nachgeschlagen.
-- **Mehrere opencode-Prozesse:** Der erste besitzt den Port, weitere leiten ihre Events per `POST /api/ingest` weiter.
-- **Hot-Reload:** Ändert sich die Plugin-Datei, löst die neue Version den Server der alten ab.
+- **One file, zero dependencies:** `build.ts` bundles the UI, the font and the server with esbuild into `dist/pixel-office.js`.
+- **opencode 1.x and 2.x:** classic hooks (`server` → `event`) and the new `setup(ctx)` API; `src/v2.ts` translates
+  v2 events (`session.execution.*`, `session.tool.*`, `session.text/reasoning.*`, `form.*` …).
+- **Subagents** are child sessions with a `parentID`; sessions revived via `task_revive` are looked up once with
+  `ctx.session.get`.
+- **Several opencode processes:** the first one owns the port, the others forward their events via `POST /api/ingest`.
+- **Hot reload:** when the plugin file changes, the new version takes over from the old server.
 
-## 🩺 Fehlerbehebung
+## 🩺 Troubleshooting
 
 <details>
-<summary><b>Seite nicht erreichbar</b></summary>
+<summary><b>The page doesn't load</b></summary>
 
-- Läuft opencode gerade? opencode entlädt Plugins, wenn eine Weile keine Instanz aktiv ist – CLI öffnen genügt.
-- Log prüfen: `~/.local/share/opencode/log/opencode.log` nach `pixel-office` durchsuchen
-  (z. B. „failed to load plugin“ oder „Port … belegt“).
+- Is opencode running? opencode unloads plugins when no instance has been active for a while – opening the CLI is enough.
+- Check the log: search `~/.local/share/opencode/log/opencode.log` for `pixel-office`
+  (e.g. "failed to load plugin" or "Port … is taken").
 </details>
 
 <details>
-<summary><b>Port belegt</b></summary>
+<summary><b>"Host not allowed" (421)</b></summary>
 
-Ein anderer opencode-Prozess besitzt den Port bereits – das ist gewollt, die Events werden dorthin weitergeleitet.
-Für einen anderen Port: `./install.sh --port 4800`.
+You opened the UI through a host name without a token. Use `localhost`/the IP address, add the name to
+`allowedHosts`, or set a `token`.
 </details>
 
 <details>
-<summary><b>Einstellungen greifen nicht</b></summary>
+<summary><b>Port already in use</b></summary>
 
-Statt Umgebungsvariablen `pixel-office.json` nutzen (`./install.sh --host … --token …`). Der opencode-Hintergrund-Service
-sieht Variablen nicht, die nach seinem Start gesetzt wurden.
+Another opencode process already owns the port – that's intended, events are forwarded there.
+For a different port: `./install.sh --port 4800`.
 </details>
 
 <details>
-<summary><b>Diagnose der Events</b></summary>
+<summary><b>Settings don't apply</b></summary>
 
-Von jedem Event-Typ landen die ersten zwei Beispiele (Texte gekürzt) in
-`~/.local/share/opencode/log/pixel-office-events.jsonl`.
+Use `pixel-office.json` instead of environment variables (`./install.sh --host … --token …`). opencode's background
+service doesn't see variables set after it started.
 </details>
 
-## 🛠 Entwicklung
+<details>
+<summary><b>Inspecting events</b></summary>
+
+With `PIXEL_OFFICE_DEBUG=1` (or `"debug": true` in `pixel-office.json`) the first two samples of each event type are
+written to `~/.local/share/opencode/log/pixel-office-events.jsonl`. Texts are shortened but still contain snippets of
+prompts and commands – so this is off by default, the file is readable by you only and capped at 256 KB.
+</details>
+
+## 🛠 Development
 
 ```bash
 npm install
-npm run mock        # Demo ohne opencode: http://127.0.0.1:4777 (MOCK_SPEED=1 für schnell)
-npm test            # Store, v2-Mapping, Konfiguration
+npm run mock        # demo without opencode: http://127.0.0.1:4777 (MOCK_SPEED=1 for fast)
+npm test            # store, v2 mapping, configuration, server protection
 npm run typecheck
 npm run build       # → dist/pixel-office.js
 ```
 
 <details>
-<summary>Projektstruktur</summary>
+<summary>Project layout</summary>
 
 ```
 src/
-  plugin.ts    Plugin-Entry (default export { id, server, setup }), Singleton, Snapshot, Forwarding, Controls
-  store.ts     reiner Reducer: opencode-Events → UI-Ops
-  v2.ts        opencode-2.x-Adapter: v2-Events + Tool-Hooks → v1-Events
+  plugin.ts    plugin entry (default export { id, server, setup }), singleton, snapshot, forwarding, controls
+  store.ts     pure reducer: opencode events → UI ops
+  v2.ts        opencode 2.x adapter: v2 events + tool hooks → v1 events
   server.ts    node:http – /, /app.js, /api/state, /api/events (SSE), /api/ingest, /api/control, /api/caps
-  config.ts    Env / Optionen / pixel-office.json
+  config.ts    env / options / pixel-office.json
 web/
-  office.ts    Grundriss, Wände, Möbel, Lichter, Pathfinding
-  characters.ts  Personal (Auftrags-Workflow, Pausen) + Büro-Katze
-  scene.ts     Rendering, Personal-Zuteilung, Fäden, Gebäude, Overlays
+  office.ts      floor plan, walls, furniture, lights, pathfinding
+  characters.ts  staff (assignment workflow, breaks) + the office cat
+  scene.ts       rendering, staffing, threads, building, overlays
   panel.ts · timeline.ts · sprites.ts · bubbles.ts · roles.ts · state.ts · main.ts
+  fonts/         Pixelify Sans (OFL), inlined at build time
 scripts/
-  install.ts   plattformübergreifender Installer (install.sh / install.ps1 rufen ihn auf)
-  mock.ts      Demo-Szenario
+  install.ts   cross-platform installer (called by install.sh / install.ps1)
+  mock.ts      demo scenario
 ```
 </details>
+
+## 📜 Licenses
+
+- Font: [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans) under the SIL Open Font License 1.1
+  (`web/fonts/OFL.txt`).
+- All graphics are drawn procedurally in code – no third-party sprites.

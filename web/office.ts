@@ -95,15 +95,15 @@ interface RoomDef extends Rect {
 
 /** Rooms (interior rects, walls excluded). Signs hang on the wall the room's door is in. */
 export const ZONES: RoomDef[] = [
-  { zone: "boss", label: "CHEFBÜRO", x: 1, y: 2, w: 7, h: 6, color: "#6b2f45", sign: { x: 40, y: 8 * T + 5 } },
-  { zone: "oracle", label: "ORAKEL", x: 9, y: 2, w: 5, h: 6, color: "#45366e", sign: { x: 160, y: 8 * T + 5 } },
+  { zone: "boss", label: "BOSS", x: 1, y: 2, w: 7, h: 6, color: "#6b2f45", sign: { x: 40, y: 8 * T + 5 } },
+  { zone: "oracle", label: "ORACLE", x: 9, y: 2, w: 5, h: 6, color: "#45366e", sign: { x: 160, y: 8 * T + 5 } },
   { zone: "review", label: "REVIEW", x: 15, y: 2, w: 5, h: 6, color: "#3d4a5c", sign: { x: 256, y: 8 * T + 5 } },
-  { zone: "library", label: "BIBLIOTHEK", x: 21, y: 2, w: 10, h: 6, color: "#2c5a4a", sign: { x: 384, y: 8 * T + 5 } },
+  { zone: "library", label: "LIBRARY", x: 21, y: 2, w: 10, h: 6, color: "#2c5a4a", sign: { x: 384, y: 8 * T + 5 } },
   { zone: "studio", label: "STUDIO", x: 1, y: 12, w: 6, h: 4, color: "#285866", sign: { x: 48, y: 11 * T + 5 } },
-  { zone: "workbench", label: "WERKSTATT", x: 8, y: 12, w: 6, h: 4, color: "#5a4b3c", sign: { x: 200, y: 11 * T + 5 } },
-  { zone: "temp", label: "AUSHILFEN", x: 18, y: 12, w: 13, h: 4, color: "#4b4330", sign: { x: 392, y: 11 * T + 5 } },
-  { zone: "cat", label: "KATZENECKE", x: 1, y: 17, w: 6, h: 6, color: "#5a3550", sign: { x: 76, y: 16 * T + 5 } },
-  { zone: "games", label: "SPIELECKE", x: 8, y: 17, w: 6, h: 6, color: "#2e4d3c", sign: { x: 176, y: 16 * T + 5 } },
+  { zone: "workbench", label: "WORKSHOP", x: 8, y: 12, w: 6, h: 4, color: "#5a4b3c", sign: { x: 200, y: 11 * T + 5 } },
+  { zone: "temp", label: "TEMPS", x: 18, y: 12, w: 13, h: 4, color: "#4b4330", sign: { x: 392, y: 11 * T + 5 } },
+  { zone: "cat", label: "CAT CORNER", x: 1, y: 17, w: 6, h: 6, color: "#5a3550", sign: { x: 76, y: 16 * T + 5 } },
+  { zone: "games", label: "GAME ROOM", x: 8, y: 17, w: 6, h: 6, color: "#2e4d3c", sign: { x: 176, y: 16 * T + 5 } },
   { zone: "lounge", label: "LOUNGE", x: 18, y: 17, w: 13, h: 6, color: "#3b4561", sign: { x: 470, y: 16 * T + 5 } },
 ];
 
@@ -1178,8 +1178,8 @@ export class Office {
       pixelText(g, "NEWS", sc.x + 1, sc.y, "#fff");
       const tk = dyn.tokens;
       const tok = tk >= 1e6 ? (tk / 1e6).toFixed(1) + "M" : tk >= 1e3 ? Math.round(tk / 1e3) + "K" : String(tk);
-      pixelText(g, `${dyn.active} AKTIV`, sc.x + 2, sc.y + 7, "#ffd43b");
-      const msg = `+++ ${dyn.inbox} BERICHTE FERTIG +++ ${dyn.outbox} OFFEN +++ ${tok} TOKENS +++`;
+      pixelText(g, `${dyn.active} ACTIVE`, sc.x + 2, sc.y + 7, "#ffd43b");
+      const msg = `+++ ${dyn.inbox} REPORTS DONE +++ ${dyn.outbox} OPEN +++ ${tok} TOKENS +++`;
       const off = Math.floor(t * 12) % (msg.length * 4 + sc.w);
       g.save();
       g.beginPath();

@@ -11,9 +11,14 @@ export interface HubOptions {
   port: number;
   host: string;
   token?: string;
+  /** extra host names accepted without a token (e.g. a Tailscale MagicDNS name) */
+  allowedHosts?: string[];
   html: string;
   js: string;
 }
+
+/** header the plugin sends when forwarding events; a custom header forces a CORS preflight in browsers */
+export const INGEST_HEADER = "x-pixel-office";
 
 const COOKIE = "po_token";
 const MAX_BODY = 5 * 1024 * 1024;
@@ -25,8 +30,30 @@ const SECURITY_HEADERS = {
 };
 
 const CSP =
-  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-  "font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'";
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+  "font-src 'self' data:; img-src 'self' data:; connect-src 'self'";
+
+const LOOPBACK_NAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
+
+/** Host header without the port, lower-cased; keeps IPv6 brackets */
+export function hostName(header: string | undefined): string {
+  const h = (header ?? "").trim().toLowerCase();
+  if (h.startsWith("[")) return h.slice(0, h.indexOf("]") + 1);
+  return h.replace(/:\d+$/, "");
+}
+
+/**
+ * Without a token every route is limited to hosts a DNS-rebinding page cannot pose as: loopback names,
+ * IP literals (a rebinding page always sends its own domain) and names listed in allowedHosts.
+ */
+export function hostAllowed(header: string | undefined, opts: Pick<HubOptions, "token" | "allowedHosts">): boolean {
+  if (opts.token) return true;
+  const host = hostName(header);
+  if (!host) return false;
+  if (LOOPBACK_NAMES.has(host) || IPV4.test(host) || (host.startsWith("[") && host.endsWith("]"))) return true;
+  return (opts.allowedHosts ?? []).some((h) => h.toLowerCase() === host);
+}
 
 function safeEqual(a: string, b: string) {
   const x = Buffer.from(a);
@@ -67,12 +94,11 @@ export class Hub {
    * the server listens on loopback and the request names a loopback host (no DNS rebinding).
    */
   private controlAllowed(req: IncomingMessage): { ok: boolean; reason?: string } {
-    if (!this.controller) return { ok: false, reason: "Host-API ohne Steuerung" };
+    if (!this.controller) return { ok: false, reason: "host API has no controls" };
     if (this.opts.token) return { ok: true };
     const loopbackBind = this.opts.host === "127.0.0.1" || this.opts.host === "localhost" || this.opts.host === "::1";
-    if (!loopbackBind) return { ok: false, reason: "PIXEL_OFFICE_TOKEN setzen, um im Netz zu steuern" };
-    const host = (req.headers.host ?? "").replace(/:\d+$/, "");
-    if (!["127.0.0.1", "localhost", "[::1]"].includes(host)) return { ok: false, reason: "nur über localhost" };
+    if (!loopbackBind) return { ok: false, reason: "set PIXEL_OFFICE_TOKEN to control over the network" };
+    if (!LOOPBACK_NAMES.has(hostName(req.headers.host))) return { ok: false, reason: "localhost only" };
     return { ok: true };
   }
 
@@ -137,6 +163,10 @@ export class Hub {
     const url = new URL(req.url ?? "/", "http://x");
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
+    if (!hostAllowed(req.headers.host, this.opts)) {
+      return this.send(res, 421, "text/plain; charset=utf-8", "Host not allowed – set a token or add the name to allowedHosts.");
+    }
+
     if (path === "/api/control" && req.method === "POST") {
       if (!this.authorized(req, url)) return this.send(res, 401, "text/plain", "unauthorized");
       const nonce = req.headers["x-po-nonce"];
@@ -162,6 +192,8 @@ export class Hub {
       // without a token, only same-host opencode processes may push events
       const ok = this.opts.token ? this.authorized(req, url) : isLoopback(req.socket.remoteAddress);
       if (!ok) return this.send(res, 401, "text/plain", "unauthorized");
+      // web pages cannot add custom headers cross-origin without a preflight, which is never answered
+      if (req.headers[INGEST_HEADER] !== "ingest") return this.send(res, 403, "text/plain", "missing ingest header");
       const body = await readBody(req);
       const events: BusEvent[] = JSON.parse(body || "{}").events ?? [];
       for (const ev of events) this.ingest(ev);
@@ -247,4 +279,4 @@ function readBody(req: IncomingMessage): Promise<string> {
 
 const UNAUTHORIZED_PAGE = `<!doctype html><meta charset="utf-8"><title>Pixel Office</title>
 <body style="background:#16121f;color:#e9e4ff;font:16px monospace;display:grid;place-items:center;height:100vh;margin:0">
-<div>🔒 Token fehlt. Öffne die URL mit <code>?token=…</code> (PIXEL_OFFICE_TOKEN).</div></body>`;
+<div>🔒 Token required. Open the URL with <code>?token=…</code> (PIXEL_OFFICE_TOKEN).</div></body>`;

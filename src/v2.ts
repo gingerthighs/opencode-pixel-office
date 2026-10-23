@@ -1,8 +1,8 @@
 // opencode 2.x plugin host: `setup(ctx)` with an event stream and tool hooks instead of v1 hooks.
 // v2 events are translated into the v1-shaped events the Store already understands.
 
-import { appendFile, mkdir } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import type { BusEvent } from "./store.ts";
 
@@ -67,7 +67,7 @@ export class V2Mapper {
         if (sid) out.push({ type: "session.status", properties: { sessionID: sid, status: { type: "busy" } } });
         return out;
       case "session.execution.failed":
-        if (sid) out.push({ type: "session.error", properties: { sessionID: sid, error: p.error ?? { message: "Ausführung fehlgeschlagen" } } });
+        if (sid) out.push({ type: "session.error", properties: { sessionID: sid, error: p.error ?? { message: "execution failed" } } });
         if (sid) out.push({ type: "session.idle", properties: { sessionID: sid } });
         return out;
       case "session.execution.interrupted":
@@ -124,7 +124,7 @@ export class V2Mapper {
         const name = str(p.name) ?? this.toolNames.get(id) ?? "tool";
         const state =
           type === "session.tool.failed"
-            ? { status: "error", input: {}, error: str(p.error?.message) ?? str(p.error) ?? "Fehler" }
+            ? { status: "error", input: {}, error: str(p.error?.message) ?? str(p.error) ?? "error" }
             : { status: "completed", input: {}, title: str(p.metadata?.title) ?? "" };
         out.push(this.toolPart(sid, id, name, state));
         return out;
@@ -148,7 +148,7 @@ export class V2Mapper {
       case "form.created":
         if (sid && sid !== "global") {
           const field = p.form?.fields?.[0];
-          const title = str(field?.description) ?? str(field?.title) ?? str(p.form?.title) ?? str(p.title) ?? "Frage";
+          const title = str(field?.description) ?? str(field?.title) ?? str(p.form?.title) ?? str(p.title) ?? "Question";
           const options = Array.isArray(field?.options) ? field.options.map((o: any) => str(o?.label) ?? str(o?.value) ?? String(o)) : undefined;
           out.push({ type: "question.asked", properties: { sessionID: sid, id: str(p.form?.id) ?? str(p.id), title, options } });
         }
@@ -205,16 +205,24 @@ export function toolEvent(e: Rec, phase: "before" | "after"): BusEvent | undefin
   const input = isRec(e.input) ? e.input : {};
   let state: Rec;
   if (phase === "before") state = { status: "running", input };
-  else if (e.status === "error") state = { status: "error", input, error: str(e.error?.message) ?? str(e.error) ?? "Fehler" };
+  else if (e.status === "error") state = { status: "error", input, error: str(e.error?.message) ?? str(e.error) ?? "error" };
   else state = { status: "completed", input, title: str(e.result?.metadata?.title) ?? "" };
   return { type: "message.part.updated", properties: { part: { id, callID: id, sessionID: sid, messageID: "v2", type: "tool", tool: name, state } } };
 }
 
-// ---- discovery log: first samples of every event type, strings shortened (no full prompts) ----
+// ---- discovery log (opt-in: PIXEL_OFFICE_DEBUG=1): first samples of every event type, strings shortened ----
 
 const MAX_PER_TYPE = 2;
+/** the samples still contain snippets of prompts and commands, so the file stays small and is rewritten per run */
+const MAX_FILE_BYTES = 256 * 1024;
 const sampled = new Map<string, number>();
 let samplePath: string | undefined;
+let sampling = false;
+let written = 0;
+
+export function setSampling(on: boolean) {
+  sampling = on;
+}
 
 function shrink(v: unknown, d = 0): unknown {
   if (typeof v === "string") return v.length > 40 ? v.slice(0, 40) + "…" : v;
@@ -224,19 +232,26 @@ function shrink(v: unknown, d = 0): unknown {
 }
 
 export function sample(kind: string, ev: unknown) {
+  if (!sampling) return;
   const n = sampled.get(kind) ?? 0;
-  if (n >= MAX_PER_TYPE || sampled.size > 300) return;
+  if (n >= MAX_PER_TYPE || sampled.size > 300 || written > MAX_FILE_BYTES) return;
   sampled.set(kind, n + 1);
-  void (async () => {
-    try {
+  const line = JSON.stringify({ kind, ev: shrink(ev) }) + "\n";
+  written += line.length;
+  // serialized so the first write (which truncates the file) always happens before the appends
+  writes = writes
+    .then(async () => {
       if (!samplePath) {
         const dir = join(homedir(), ".local", "share", "opencode", "log");
-        await mkdir(dir, { recursive: true }).catch(() => {});
+        await mkdir(dir, { recursive: true });
         samplePath = join(dir, "pixel-office-events.jsonl");
+        await writeFile(samplePath, "", { mode: 0o600 }); // fresh file per process, readable only by you
       }
-      await appendFile(samplePath, JSON.stringify({ kind, ev: shrink(ev) }) + "\n");
-    } catch {
-      samplePath = join(tmpdir(), "pixel-office-events.jsonl");
-    }
-  })();
+      await appendFile(samplePath, line, { mode: 0o600 });
+    })
+    .catch(() => {
+      // diagnostics are best effort
+    });
 }
+
+let writes: Promise<void> = Promise.resolve();

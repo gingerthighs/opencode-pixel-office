@@ -14,7 +14,12 @@ const web = await build({
   legalComments: "none",
 });
 const js = web.outputFiles[0].text;
-const html = await readFile("web/index.html", "utf8");
+// the font ships inside the page as a data URL, so the UI never contacts a font CDN
+const font = (await readFile("web/fonts/PixelifySans-latin.woff2")).toString("base64");
+const fontRef = 'url("fonts/PixelifySans-latin.woff2")';
+const page = await readFile("web/index.html", "utf8");
+if (!page.includes(fontRef)) throw new Error("web/index.html: @font-face source not found");
+const html = page.replace(fontRef, `url(data:font/woff2;base64,${font})`);
 
 await writeFile(
   "src/assets.generated.ts",

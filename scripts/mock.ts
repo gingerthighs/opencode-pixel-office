@@ -85,20 +85,20 @@ async function subagent(parent: string, parentMsg: string, agent: string, desc: 
 }
 
 async function bigRun() {
-  const dir = "/home/luis/homenet-panel";
+  const dir = "/home/dev/webshop";
   const root = uid("ses");
-  session(root, "Auth auf OAuth umbauen", dir);
+  session(root, "Move auth to OAuth", dir);
   const um = message(root, "user", "orchestrator");
-  emit("message.part.updated", { part: { id: uid("part"), sessionID: root, messageID: um, type: "text", text: "Bau das Login auf OAuth um und mach das UI schöner" } });
+  emit("message.part.updated", { part: { id: uid("part"), sessionID: root, messageID: um, type: "text", text: "Switch the login to OAuth and make the UI nicer" } });
   status(root, "busy");
   const m = message(root, "assistant", "orchestrator", 12000);
   await say(root, m, "Plan the migration: find current auth, check provider docs, then implement and review", "reasoning");
   const todos = [
-    { id: "1", content: "Bestehenden Auth-Code finden", status: "in_progress", priority: "high" },
-    { id: "2", content: "OAuth Provider Docs lesen", status: "pending", priority: "high" },
-    { id: "3", content: "Login-Flow implementieren", status: "pending", priority: "high" },
-    { id: "4", content: "Login UI überarbeiten", status: "pending", priority: "medium" },
-    { id: "5", content: "Review + Tests", status: "pending", priority: "medium" },
+    { id: "1", content: "Find the existing auth code", status: "in_progress", priority: "high" },
+    { id: "2", content: "Read the OAuth provider docs", status: "pending", priority: "high" },
+    { id: "3", content: "Implement the login flow", status: "pending", priority: "high" },
+    { id: "4", content: "Polish the login UI", status: "pending", priority: "medium" },
+    { id: "5", content: "Review + tests", status: "pending", priority: "medium" },
   ];
   const setTodo = (i: number, s: string) => {
     todos[i].status = s;
@@ -108,22 +108,22 @@ async function bigRun() {
   await tool(root, m, "todowrite", { todos }, 400);
 
   await Promise.all([
-    subagent(root, m, "explorer", "Finde Auth-Middleware", dir, async (id, am) => {
+    subagent(root, m, "explorer", "Find the auth middleware", dir, async (id, am) => {
       await tool(id, am, "grep", { pattern: "session|jwt|login" }, 1400);
       await tool(id, am, "glob", { pattern: "src/**/auth*.ts" }, 900);
       await tool(id, am, "read", { filePath: "src/server/auth/middleware.ts" }, 1600);
       await say(id, am, "Auth lives in src/server/auth: cookie sessions, bcrypt, no refresh tokens.");
     }),
-    subagent(root, m, "explorer", "Finde Login-Routen + Tests", dir, async (id, am) => {
+    subagent(root, m, "explorer", "Find login routes + tests", dir, async (id, am) => {
       await tool(id, am, "grep", { pattern: "router.post('/login'" }, 1100);
       await tool(id, am, "read", { filePath: "src/routes/login.ts" }, 1300);
       await tool(id, am, "read", { filePath: "test/login.test.ts" }, 1000);
     }),
-    subagent(root, m, "explorer", "Finde Session-Store + Cookies", dir, async (id, am) => {
+    subagent(root, m, "explorer", "Find the session store + cookies", dir, async (id, am) => {
       await tool(id, am, "grep", { pattern: "cookie|session" }, 1600);
       await tool(id, am, "read", { filePath: "src/server/session.ts" }, 1400);
     }),
-    subagent(root, m, "librarian", "OAuth PKCE Docs recherchieren", dir, async (id, am) => {
+    subagent(root, m, "librarian", "Research OAuth PKCE docs", dir, async (id, am) => {
       await tool(id, am, "websearch", { query: "oauth 2.1 pkce node best practice" }, 1800);
       await tool(id, am, "webfetch", { url: "https://oauth.net/2/pkce/" }, 2200);
       await say(id, am, "PKCE with S256 is required for public clients; use state + nonce, rotate refresh tokens.");
@@ -133,7 +133,7 @@ async function bigRun() {
   setTodo(1, "completed");
   setTodo(2, "in_progress");
 
-  await subagent(root, m, "oracle", "Architektur-Check Token-Storage", dir, async (id, am) => {
+  await subagent(root, m, "oracle", "Architecture check: token storage", dir, async (id, am) => {
     await say(id, am, "Weighing httpOnly cookies vs. in-memory tokens with silent refresh, considering XSS and CSRF tradeoffs", "reasoning");
     await say(id, am, "Recommend httpOnly SameSite=Lax cookie for refresh token, short-lived access token in memory.");
   });
@@ -152,7 +152,7 @@ async function bigRun() {
   await tool(root, m, "bash", { command: "npm install openid-client", description: "Install OAuth client" }, 1500);
 
   await Promise.all([
-    subagent(root, m, "fixer", "OAuth Flow implementieren", dir, async (id, am) => {
+    subagent(root, m, "fixer", "Implement the OAuth flow", dir, async (id, am) => {
       await tool(id, am, "read", { filePath: "src/server/auth/middleware.ts" }, 700);
       await tool(id, am, "edit", { filePath: "src/server/auth/oauth.ts" }, 2000);
       await tool(id, am, "edit", { filePath: "src/routes/login.ts" }, 1600);
@@ -161,7 +161,7 @@ async function bigRun() {
       await tool(id, am, "edit", { filePath: "config/default.json" }, 900);
       await tool(id, am, "bash", { command: "npm test", description: "Run tests" }, 2000);
     }),
-    subagent(root, m, "designer", "Login UI im Pixel-Look", dir, async (id, am) => {
+    subagent(root, m, "designer", "Pixel-style login UI", dir, async (id, am) => {
       await tool(id, am, "read", { filePath: "web/pages/login.tsx" }, 900);
       await say(id, am, "Going for a centered card, provider buttons with icons, subtle gradient background.");
       await tool(id, am, "write", { filePath: "web/pages/login.tsx" }, 2600);
@@ -172,25 +172,25 @@ async function bigRun() {
   setTodo(3, "completed");
   setTodo(4, "in_progress");
 
-  await subagent(root, m, "reviewer", "Review der Änderungen", dir, async (id, am) => {
+  await subagent(root, m, "reviewer", "Review the changes", dir, async (id, am) => {
     await tool(id, am, "bash", { command: "git diff --stat", description: "Show diff" }, 900);
     await tool(id, am, "bash", { command: "git diff", description: "Show diff" }, 1400);
     await say(id, am, "LGTM. Minor: add rate limit on /auth/callback. No blockers.");
   });
   setTodo(4, "completed");
-  await say(root, m, "Fertig: OAuth mit PKCE, neues Login-UI, Tests grün. Ein Nit vom Reviewer offen (Rate Limit).");
+  await say(root, m, "Done: OAuth with PKCE, new login UI, tests green. One reviewer nit left (rate limit).");
   message(root, "assistant", "orchestrator", 30000);
   status(root, "idle");
   return root;
 }
 
 async function smallRun() {
-  const dir = "/home/luis/dotfiles";
+  const dir = "/home/dev/docs-site";
   const root = uid("ses");
-  session(root, "README aufräumen", dir);
+  session(root, "Tidy up the README", dir);
   status(root, "busy");
   const m = message(root, "assistant", "orchestrator", 3000);
-  await subagent(root, m, "explorer", "Finde alle Docs", dir, async (id, am) => {
+  await subagent(root, m, "explorer", "Find all docs", dir, async (id, am) => {
     await tool(id, am, "glob", { pattern: "**/*.md" }, 1200);
   });
   await tool(root, m, "edit", { filePath: "README.md" }, 2500);

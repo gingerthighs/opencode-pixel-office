@@ -102,12 +102,12 @@ export const STATUS_COLOR: Record<string, string> = {
 };
 
 export const STATUS_LABEL: Record<string, string> = {
-  busy: "arbeitet",
-  idle: "wartet",
-  retry: "Retry",
-  error: "Fehler",
-  done: "fertig",
-  waiting: "braucht Freigabe",
+  busy: "working",
+  idle: "idle",
+  retry: "retrying",
+  error: "error",
+  done: "done",
+  waiting: "needs approval",
 };
 
 // ---------- permanent staff ----------
@@ -148,4 +148,4 @@ export const STAFF: StaffDef[] = [
   { key: "rita", name: "Rita", team: "reviewer" },
 ];
 
-export const TEMP_NAMES = ["Aushilfe Tim", "Aushilfe Mia", "Aushilfe Ben", "Aushilfe Zoe", "Aushilfe Kai", "Aushilfe Lia", "Aushilfe Max", "Aushilfe Ida"];
+export const TEMP_NAMES = ["Temp Tim", "Temp Mia", "Temp Ben", "Temp Zoe", "Temp Kai", "Temp Lia", "Temp Max", "Temp Ida"];
