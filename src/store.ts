@@ -333,12 +333,17 @@ export class Store {
     const a = e.agent;
     const prev = a.status;
     let next = s;
+    const clearedAsk = s === "idle" && (a.waiting || !!a.ask);
     if (s === "idle") {
       a.waiting = false;
+      a.ask = undefined;
       if (a.parentId) next = "done";
       else if (prev === "error") next = "error";
     }
-    if (next === prev) return;
+    if (next === prev) {
+      if (clearedAsk) this.emit(e, ops);
+      return;
+    }
     a.status = next;
     if (next === "done") {
       a.doneAt = this.clock();
@@ -354,7 +359,7 @@ export class Store {
   private setWaiting(id: string, waiting: boolean, what: string, ops: Op[], ask?: Ask) {
     const e = this.ensure(id, ops);
     const a = e.agent;
-    if (a.waiting === waiting && !ask) return;
+    if (a.waiting === waiting && !ask && (waiting || !a.ask)) return;
     if (waiting && (!a.waiting || ask?.id !== a.ask?.id)) this.log(e, "ask", `waiting: ${head(what, 120)}`, ops);
     a.waiting = waiting;
     a.ask = waiting ? ask : undefined;

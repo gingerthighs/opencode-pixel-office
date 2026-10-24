@@ -317,6 +317,9 @@ export class Panel {
   private askBox(a: Agent): HTMLElement {
     const ask = a.ask!;
     const box = el("div", "ask " + ask.kind);
+    // swap compares markup: include identities captured by the button handlers.
+    box.dataset.sessionId = a.id;
+    box.dataset.requestId = ask.id ?? "";
     const h = el("div", "ask-head");
     h.append(img(iconURL("question"), "ico"), el("strong", "", ask.kind === "permission" ? "Approval needed" : "Question"));
     box.append(h, el("div", "ask-title", ask.title));
@@ -351,6 +354,7 @@ export class Panel {
     if (!caps.control || !(a.status === "busy" || a.status === "retry" || a.waiting)) return;
     const armed = (this.actions.get(a.id)?.armedStop ?? 0) > Date.now();
     const wrap = el("div", "ctl");
+    wrap.dataset.sessionId = a.id;
     const b = el("button", "btn no" + (armed ? " armed" : ""), armed ? "Really stop?" : "■ Stop");
     b.onclick = () => {
       if (!armed) {

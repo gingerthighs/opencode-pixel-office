@@ -7,6 +7,13 @@ import type { ControlRequest, Op } from "./types.ts";
 
 export type Controller = (req: ControlRequest) => Promise<void>;
 
+/** A callback endpoint owned by another plugin process on this machine. */
+export interface Forwarder {
+  id: string;
+  port: number;
+  token: string;
+}
+
 export interface HubOptions {
   port: number;
   host: string;
@@ -15,6 +22,7 @@ export interface HubOptions {
   allowedHosts?: string[];
   html: string;
   js: string;
+  onForward?: (owner: Forwarder, sessions: string[]) => void;
 }
 
 /** header the plugin sends when forwarding events; a custom header forces a CORS preflight in browsers */
@@ -70,6 +78,71 @@ function readCookie(req: IncomingMessage, name: string): string | undefined {
 
 const isLoopback = (addr?: string) => !!addr && (addr === "::1" || addr.startsWith("127.") || addr === "::ffff:127.0.0.1");
 
+function isControl(body: any): body is ControlRequest {
+  return !!body && typeof body.sessionID === "string" && !!body.sessionID &&
+    (body.action === "interrupt" || (body.action === "permission" && typeof body.requestID === "string" &&
+      ["once", "always", "reject"].includes(body.decision)));
+}
+
+function isForwarder(value: any): value is Forwarder {
+  return !!value && typeof value.id === "string" && value.id.length <= 128 &&
+    Number.isInteger(value.port) && value.port > 0 && value.port < 65536 &&
+    typeof value.token === "string" && /^[a-f0-9]{64}$/.test(value.token);
+}
+
+/** Private reverse channel. No browser nonce or public UI is exposed here. */
+export class ControlRelay {
+  private server?: Server;
+  private controller: Controller;
+  private token = randomBytes(32).toString("hex");
+  private id = randomBytes(16).toString("hex");
+
+  constructor(controller: Controller) {
+    this.controller = controller;
+  }
+
+  async listen(): Promise<Forwarder> {
+    const server = createServer((req, res) => {
+      const reply = (code: number, body = "") => {
+        res.writeHead(code, { ...SECURITY_HEADERS, "content-type": "text/plain", "cache-control": "no-store" });
+        res.end(body);
+      };
+      void (async () => {
+        const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "";
+        if (!isLoopback(req.socket.remoteAddress) || !safeEqual(bearer, this.token)) return reply(401, "unauthorized");
+        if (req.headers[INGEST_HEADER] !== "control") return reply(403, "missing control header");
+        if (req.method !== "POST" || req.url !== "/") return reply(405);
+        let body: unknown;
+        try { body = JSON.parse(await readBody(req)); } catch { return reply(400, "bad request"); }
+        if (!isControl(body)) return reply(400, "bad request");
+        try {
+          await this.controller(body);
+          reply(200);
+        } catch (err) {
+          reply(502, String(err));
+        }
+      })().catch(() => { if (!res.headersSent) reply(500); else res.end(); });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => { server.off("error", reject); resolve(); });
+    });
+    this.server = server;
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("relay has no port");
+    return { id: this.id, token: this.token, port: address.port };
+  }
+
+  async close() {
+    const server = this.server;
+    this.server = undefined;
+    if (server) {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }
+}
+
 export class Hub {
   readonly store: Store;
   private opts: HubOptions;
@@ -104,6 +177,11 @@ export class Hub {
 
   get clientCount() {
     return this.clients.size;
+  }
+
+  get port() {
+    const address = this.server?.address();
+    return address && typeof address !== "string" ? address.port : this.opts.port;
   }
 
   ingest(ev: BusEvent) {
@@ -173,11 +251,8 @@ export class Hub {
       if (typeof nonce !== "string" || !safeEqual(nonce, this.nonce)) return this.send(res, 403, "text/plain", "bad nonce");
       const allowed = this.controlAllowed(req);
       if (!allowed.ok) return this.send(res, 403, "text/plain", allowed.reason ?? "forbidden");
-      const body = JSON.parse((await readBody(req)) || "{}") as ControlRequest;
-      if (!body || typeof body.sessionID !== "string" || !["permission", "interrupt"].includes(body.action)) {
-        return this.send(res, 400, "text/plain", "bad request");
-      }
-      if (body.action === "permission" && (typeof body.requestID !== "string" || !["once", "always", "reject"].includes(body.decision))) {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      if (!isControl(body)) {
         return this.send(res, 400, "text/plain", "bad request");
       }
       try {
@@ -195,7 +270,17 @@ export class Hub {
       // web pages cannot add custom headers cross-origin without a preflight, which is never answered
       if (req.headers[INGEST_HEADER] !== "ingest") return this.send(res, 403, "text/plain", "missing ingest header");
       const body = await readBody(req);
-      const events: BusEvent[] = JSON.parse(body || "{}").events ?? [];
+      const payload = JSON.parse(body || "{}");
+      const events: BusEvent[] = payload.events ?? [];
+      if (!Array.isArray(events)) return this.send(res, 400, "text/plain", "bad events");
+      if (payload.owner !== undefined) {
+        // Callbacks are exclusively local; never accept an arbitrary remote URL.
+        if (!isLoopback(req.socket.remoteAddress) || !isForwarder(payload.owner) ||
+            !Array.isArray(payload.sessions) || !payload.sessions.every((id: unknown) => typeof id === "string")) {
+          return this.send(res, 400, "text/plain", "bad owner");
+        }
+        this.opts.onForward?.(payload.owner, payload.sessions);
+      }
       for (const ev of events) this.ingest(ev);
       return this.send(res, 204, "text/plain", "");
     }
@@ -228,7 +313,7 @@ export class Hub {
         return this.send(res, 200, "text/javascript; charset=utf-8", this.opts.js);
       case "/api/caps": {
         const c = this.controlAllowed(req);
-        return this.send(res, 200, "application/json", JSON.stringify({ control: c.ok, reason: c.reason }));
+        return this.send(res, 200, "application/json", JSON.stringify({ control: c.ok, reason: c.reason, nonce: c.ok ? this.nonce : undefined }));
       }
       case "/api/state":
         return this.send(res, 200, "application/json", JSON.stringify(this.store.snapshot()));

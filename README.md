@@ -195,11 +195,13 @@ Otto always takes the main session of a room. Subagents go to the matching free 
 - **DNS-rebinding protection:** without a token the server only answers requests for `localhost`, IP addresses and
   names in `allowedHosts`. A malicious page that points its own domain at `127.0.0.1` gets `421`.
 - **Controls** (answering approvals, stop) go through `POST /api/control`:
-  - they need a nonce that only the served page knows – other websites cannot trigger anything,
+  - they need a nonce read from the same-origin capabilities endpoint; it refreshes after reconnects,
   - without a token only on a loopback bind with a `localhost` Host header,
   - over the network only with a token.
 - **Event forwarding** (`POST /api/ingest`, between opencode processes) needs a custom header; browsers can't send
   it cross-site without a CORS approval, which is never given.
+- **Forwarded controls** return to the process that owns the session through a private loopback listener,
+  protected by a random per-process token and a custom header. Its credentials never appear in UI snapshots.
 - **Token file:** the installer creates `pixel-office.json` with mode `600` (readable by you only).
 - **No third parties:** the font is embedded, the page loads nothing from other servers.
 - **Questions** (an agent asking you to pick an option) are shown but answered in the terminal – opencode's plugin
@@ -225,6 +227,8 @@ flowchart LR
 - **Subagents** are child sessions with a `parentID`; sessions revived via `task_revive` are looked up once with
   `ctx.session.get`.
 - **Several opencode processes:** the first one owns the port, the others forward their events via `POST /api/ingest`.
+  Failed batches retry in order with bounded backoff; the backlog keeps up to 5,000 queued events and logs overflow.
+  Approval and stop requests route back to the session's owner; host errors are reported in the UI.
 - **Hot reload:** when the plugin file changes, the new version takes over from the old server.
 
 ## 🩺 Troubleshooting
@@ -271,7 +275,7 @@ prompts and commands – so this is off by default, the file is readable by you 
 ```bash
 npm install
 npm run mock        # demo without opencode: http://127.0.0.1:4777 (MOCK_SPEED=1 for fast)
-npm test            # store, v2 mapping, configuration, server protection
+npm test            # builds first; reducer, adapters, forwarding, controls, UI regressions, server protection
 npm run typecheck
 npm run build       # → dist/pixel-office.js
 ```
@@ -281,7 +285,8 @@ npm run build       # → dist/pixel-office.js
 
 ```
 src/
-  plugin.ts    plugin entry (default export { id, server, setup }), singleton, snapshot, forwarding, controls
+  plugin.ts    plugin entry (default export { id, server, setup }), singleton, host adapters
+  instance.ts  session ownership, snapshots, forwarding retries, control routing
   store.ts     pure reducer: opencode events → UI ops
   v2.ts        opencode 2.x adapter: v2 events + tool hooks → v1 events
   server.ts    node:http – /, /app.js, /api/state, /api/events (SSE), /api/ingest, /api/control, /api/caps
@@ -290,6 +295,7 @@ web/
   office.ts      floor plan, walls, furniture, lights, pathfinding
   characters.ts  staff (assignment workflow, breaks) + the office cat
   scene.ts       rendering, staffing, threads, building, overlays
+  controls.ts    refreshed capabilities and nonce, control requests
   panel.ts · timeline.ts · sprites.ts · bubbles.ts · roles.ts · state.ts · main.ts
   fonts/         Pixelify Sans (OFL), inlined at build time
 scripts/

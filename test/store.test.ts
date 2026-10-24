@@ -129,6 +129,32 @@ test("helpers", () => {
   assert.equal(delegationTarget("background_output", { task_id: "x" }), undefined);
 });
 
+for (const initial of ["busy", "idle", "error"] as const) {
+  test(`idle clears approval and emits it when previous status is ${initial}`, () => {
+    const { store, ev } = setup();
+    ev("session.created", { info: { id: "root" } });
+    if (initial === "error") ev("session.error", { sessionID: "root", error: { message: "failed" } });
+    else ev("session.status", { sessionID: "root", status: { type: initial } });
+    ev("permission.asked", { sessionID: "root", id: "request-1", permission: "bash" });
+    const ops = ev("session.idle", { sessionID: "root" });
+    assert.equal(store.agent("root")?.waiting, false);
+    assert.equal(store.agent("root")?.ask, undefined);
+    assert.ok(ops.some((o) => o.op === "agent" && !o.agent.waiting && !o.agent.ask));
+    ev("permission.replied", { sessionID: "root", requestID: "request-1" });
+    assert.equal(store.agent("root")?.ask, undefined);
+  });
+}
+
+test("interruption clears a child's question before it becomes done", () => {
+  const { store, ev } = setup();
+  ev("session.created", { info: { id: "child", parentID: "root" } });
+  ev("question.asked", { sessionID: "child", id: "q1", title: "Continue?" });
+  ev("session.error", { sessionID: "child", error: { name: "MessageAbortedError" } });
+  assert.equal(store.agent("child")?.status, "done");
+  assert.equal(store.agent("child")?.waiting, false);
+  assert.equal(store.agent("child")?.ask, undefined);
+});
+
 test("asks carry request ids and details; write tools collect files", () => {
   const { store, ev } = setup();
   ev("session.created", { info: { id: "s" } });

@@ -1,4 +1,5 @@
-import type { ControlRequest, Op, Snapshot } from "../src/types.ts";
+import type { Op, Snapshot } from "../src/types.ts";
+import { Controls } from "./controls.ts";
 import { Panel } from "./panel.ts";
 import { Scene } from "./scene.ts";
 import { ClientState } from "./state.ts";
@@ -34,22 +35,8 @@ const buildingBtn = $<HTMLButtonElement>("building");
 const timelineEl = $<HTMLElement>("timeline");
 const conn = $<HTMLElement>("conn");
 
-// control requests must echo the per-process nonce the server put into this page
-const nonce = document.querySelector('meta[name="po-nonce"]')?.getAttribute("content") ?? "";
-let caps: { control: boolean; reason?: string } = { control: false, reason: "loading…" };
-fetch("api/caps")
-  .then((r) => r.json())
-  .then((c) => (caps = c))
-  .catch(() => (caps = { control: false, reason: "unreachable" }));
-
-async function control(req: ControlRequest) {
-  const res = await fetch("api/control", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-po-nonce": nonce },
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) throw new Error((await res.text()) || res.statusText);
-}
+const controls = new Controls(fetch, () => (dirty = true));
+void controls.refresh();
 
 let roomId = store.get("room");
 let selected: string | undefined;
@@ -94,8 +81,8 @@ const select = (key: string | undefined) => {
 const panel = new Panel(state, {
   selectRoom: pickRoom,
   select,
-  control,
-  caps: () => caps,
+  control: (req) => controls.send(req),
+  caps: () => controls.caps,
   workerName: (id) => scene.workerName(id),
   personInfo: (key) => scene.personInfo(key),
   roster: () => scene.roster(),
@@ -152,6 +139,7 @@ function connect() {
     .catch(() => {});
   const es = new EventSource("api/events");
   es.addEventListener("snapshot", (e) => {
+    void controls.refresh();
     streamed = true;
     state.load(JSON.parse((e as MessageEvent).data) as Snapshot);
     scene.reset();

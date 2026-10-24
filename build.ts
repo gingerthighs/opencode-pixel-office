@@ -28,7 +28,7 @@ await writeFile(
 
 // content hash of all sources → lets a hot-reloaded plugin replace the previous version's server
 const srcHash = createHash("sha256");
-for (const f of ["src/plugin.ts", "src/store.ts", "src/server.ts", "src/v2.ts", "src/config.ts", "src/assets.generated.ts"]) {
+for (const f of ["src/plugin.ts", "src/instance.ts", "src/store.ts", "src/server.ts", "src/v2.ts", "src/config.ts", "src/assets.generated.ts"]) {
   srcHash.update(await readFile(f));
 }
 
