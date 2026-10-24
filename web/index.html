@@ -50,7 +50,7 @@
       .tab .proj { color: var(--muted); white-space: nowrap; }
       .tab .ttl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .tab .count { background: #0f0c17; color: var(--muted); padding: 0 5px; font-size: 12px; }
-      .opts { display: flex; gap: 12px; align-items: center; white-space: nowrap; color: var(--muted); }
+      .opts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; align-items: center; color: var(--muted); }
       .opts label { display: flex; gap: 5px; align-items: center; cursor: pointer; }
       .opts input { accent-color: var(--accent); }
       .conn { width: 10px; height: 10px; background: #868e96; flex: none; box-shadow: 0 0 0 2px #0a0810; }
@@ -61,15 +61,38 @@
       #left { display: grid; grid-template-rows: 1fr auto; min-width: 0; min-height: 0; }
       #timeline { display: none; max-height: 30vh; overflow-y: auto; border-top: 2px solid var(--line); background: var(--panel); padding: 4px 10px 8px; }
       body.with-timeline #timeline { display: block; }
-      .tl-axis { position: relative; height: 16px; margin-left: 110px; border-bottom: 1px dashed var(--line); }
+      .tl-axis { position: relative; height: 16px; margin-left: 170px; margin-right: 16px; border-bottom: 1px dashed var(--line); }
       .tl-tick { position: absolute; transform: translateX(-50%); font-size: 10px; color: var(--muted); }
       .tl-row { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: 0; color: var(--text); font: inherit; padding: 2px 0; cursor: pointer; }
       .tl-row:hover, .tl-row.sel { background: var(--panel-2); }
-      .tl-who { display: flex; align-items: center; gap: 5px; width: 104px; flex: none; font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .tl-who { display: flex; align-items: center; gap: 5px; width: 164px; flex: none; font-size: 12px; overflow: hidden; text-align: left; }
       .tl-ava { width: 16px; height: 15px; }
-      .tl-lane { position: relative; flex: 1; height: 10px; background: #0f0c17; }
+      .tl-lane { position: relative; flex: 1; height: 12px; margin-right: 16px; overflow: hidden; background: #0f0c17; }
       .tl-bar { position: absolute; top: 0; bottom: 0; background: var(--c); opacity: 0.85; }
       .tl-bar.done { opacity: 0.45; }
+      .tl-toolbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 5px 0 10px; }
+      .tl-toolbar select { background: var(--panel-2); color: var(--text); font: inherit; border: 1px solid var(--line-hi); padding: 3px; }
+      .tl-key { font-size: 11px; color: var(--muted); }
+      .tl-key::before { content: ""; display: inline-block; width: 7px; height: 7px; background: var(--c); margin-right: 4px; }
+      .tl-caption { display: flex; flex-direction: column; overflow: hidden; }
+      .tl-caption > span:first-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .tl-totals, .tl-note { font-size: 10px; color: var(--muted); }
+      .tl-note { padding: 6px 0; }
+      #attention-button { color: var(--accent); }
+      #attention-count { display: inline-block; min-width: 18px; background: #100d18; padding: 0 3px; }
+      #attention { border-bottom: 2px solid var(--line); }
+      #attention summary { padding: 10px 14px; color: var(--accent); cursor: pointer; }
+      #attention-list { max-height: 24vh; overflow-y: auto; }
+      .attention-row { display: flex; flex-direction: column; width: 100%; text-align: left; gap: 3px; padding: 8px 14px; font: inherit; color: var(--text); background: var(--panel-2); border: 0; border-top: 1px solid var(--line); border-left: 3px solid #ffd43b; cursor: pointer; overflow-wrap: anywhere; }
+      .attention-row:hover { background: var(--panel-3); }
+      .attention-row.failure { border-left-color: #ff6b6b; }
+      .attention-row.inactive { border-left-color: #b197fc; }
+      .attention-context { color: var(--muted); font-size: 11px; }
+      #connection-warning { padding: 8px 14px; color: #ffc078; background: #2a2210; }
+      #connection-warning { grid-row: 1; }
+      #attention { grid-row: 2; }
+      #agents { grid-row: 3; }
+      #detail { grid-row: 4; }
       .hbtn { background: var(--panel-2); color: var(--text); border: 0; box-shadow: var(--px); font: inherit; padding: 3px 9px; cursor: pointer; }
       .hbtn.active { box-shadow: 0 0 0 2px var(--accent), 3px 3px 0 0 #0a0810; }
       .breakroom { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 14px 6px; }
@@ -97,7 +120,7 @@
       .hint-p { padding: 8px 0; }
       #stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: radial-gradient(ellipse at center, #1a1527 0%, var(--bg) 70%); }
       #office { position: absolute; inset: 0; image-rendering: pixelated; }
-      aside { background: var(--panel); border-left: 2px solid var(--line); display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+      aside { background: var(--panel); border-left: 2px solid var(--line); display: grid; grid-template-rows: auto auto auto minmax(90px, 1fr); min-height: 0; }
       #agents { max-height: 42vh; overflow-y: auto; border-bottom: 2px solid var(--line); padding: 4px 0 8px; }
       .list-head { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 14px 6px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; font-size: 13px; }
       .muted-inline { color: var(--muted); text-transform: none; letter-spacing: 0; font-size: 12px; }
@@ -152,14 +175,19 @@
       .f.spawn .x { color: #fff3bf; }
       .muted { color: var(--muted); padding: 6px 14px; }
       @media (max-width: 860px) {
-        body { overflow: auto; grid-template-rows: auto auto; }
+        body { display: block; height: auto; min-height: 100%; overflow: auto; }
         header { flex-wrap: wrap; padding: 8px 16px; }
         #rooms { order: 3; flex-basis: 100%; }
-        main { grid-template-columns: 1fr; grid-template-rows: auto auto; }
+        main { display: block; }
+        #left { display: block; }
         #stage { aspect-ratio: 4 / 3; max-height: 72vh; }
-        aside { border-left: 0; border-top: 2px solid var(--line); }
+        aside { display: block; border-left: 0; border-top: 2px solid var(--line); }
         #agents { max-height: none; }
         #detail { overflow: visible; }
+        .opts { justify-content: flex-start; white-space: normal; }
+        #attention-list { max-height: 40vh; }
+        .tl-who { width: 130px; }
+        .tl-axis { margin-left: 136px; }
       }
     </style>
   </head>
@@ -168,6 +196,7 @@
       <h1>PIXEL <span>OFFICE</span></h1>
       <nav id="rooms" aria-label="Sessions"></nav>
       <div class="opts">
+        <button id="attention-button" class="hbtn" aria-controls="attention">Needs attention <span id="attention-count">0</span></button>
         <button id="building" class="hbtn" title="Building overview">▤ Building</button>
         <label title="Threads from the boss to everyone working"><input type="checkbox" id="threads" /> Threads</label>
         <label><input type="checkbox" id="timeline-toggle" /> Timeline</label>
@@ -182,6 +211,11 @@
         <div id="timeline" aria-label="Timeline"></div>
       </div>
       <aside>
+        <div id="connection-warning" role="status" hidden></div>
+        <details id="attention">
+          <summary>Needs attention · all rooms</summary>
+          <div id="attention-list"></div>
+        </details>
         <div id="agents"></div>
         <div id="detail"></div>
       </aside>

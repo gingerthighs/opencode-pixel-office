@@ -63,6 +63,12 @@ export interface Agent {
   createdAt: number;
   updatedAt: number;
   doneAt?: number;
+  /** Receipt time of an incoming session event, never advanced by timer flushes. */
+  lastActivityAt: number;
+  waitingSince?: number;
+  failure?: { at: number; message: string };
+  outcome?: "completed" | "failed" | "interrupted";
+  completedAt?: number;
 }
 
 export interface Room {
@@ -77,10 +83,28 @@ export interface AgentView extends Agent {
   feed: FeedEntry[];
 }
 
+export type ActivityState = "working" | "retrying" | "waiting" | "idle" | "failed";
+
+export interface ActivityInterval {
+  state: ActivityState;
+  start: number;
+  end?: number;
+}
+
+export interface ActivityRecord {
+  agent: AgentView;
+  firstObservedAt: number;
+  intervals: ActivityInterval[];
+  archived: boolean;
+  truncated: boolean;
+}
+
 export interface Snapshot {
   rooms: Room[];
   agents: AgentView[];
   now: number;
+  history: ActivityRecord[];
+  historyTruncated: boolean;
 }
 
 export type ControlRequest =
@@ -92,5 +116,8 @@ export type Op =
   | { op: "room-remove"; id: string }
   | { op: "agent"; agent: Agent }
   | { op: "agent-remove"; id: string }
+  | { op: "history"; record: ActivityRecord }
+  | { op: "history-remove"; id: string }
+  | { op: "history-truncated" }
   | { op: "feed"; id: string; entry: FeedEntry }
   | { op: "delegate"; from: string; to: string; label: string };

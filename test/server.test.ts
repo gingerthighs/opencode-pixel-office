@@ -4,6 +4,8 @@ import { request } from "node:http";
 import { ControlRelay, Hub, hostAllowed, hostName, INGEST_HEADER } from "../src/server.ts";
 import { Store } from "../src/store.ts";
 import { http } from "./http.ts";
+import type { Op, Snapshot } from "../src/types.ts";
+import { ClientState } from "../web/state.ts";
 
 test("hostName strips ports and keeps IPv6 brackets", () => {
   assert.equal(hostName("LocalHost:4777"), "localhost");
@@ -81,4 +83,67 @@ test("ingest rejects invalid callback endpoints without applying events", async 
     body: { events: [{ type: "session.created", properties: { info: { id: "s" } } }], owner: { id: "x", port: -1, token: "x" }, sessions: ["s"] },
   });
   assert.equal(res.status, 400); assert.equal(store.has("s"), false);
+});
+
+test("SSE reconnect restores archived history; live history ops and server restart replace it", async (t) => {
+  let now = 1_000_000;
+  const store = new Store(() => now);
+  const hub = new Hub(store, { port: 0, host: "127.0.0.1", html: "", js: "" });
+  t.after(() => hub.close()); await hub.listen();
+  hub.ingest({ type: "session.created", properties: { info: { id: "root" } } });
+  hub.ingest({ type: "session.created", properties: { info: { id: "child", parentID: "root" } } });
+  hub.ingest({ type: "session.status", properties: { sessionID: "child", status: { type: "busy" } } });
+  now += 1000;
+  hub.ingest({ type: "session.error", properties: { sessionID: "child", error: { message: "failed" } } });
+  hub.ingest({ type: "session.idle", properties: { sessionID: "child" } });
+  now += 61_000; hub.broadcast(store.tick());
+  const client = new ClientState();
+
+  const stream = (port: number, onSnapshot?: () => void) => new Promise<Snapshot>((resolve, reject) => {
+    let buffer = "", snapshot: Snapshot;
+    const req = request({ host: "127.0.0.1", port, path: "/api/events" }, (res) => {
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        buffer += chunk;
+        let boundary: number;
+        while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+          const frame = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 2);
+          const data = frame.split("\n").find((line) => line.startsWith("data: "))?.slice(6);
+          if (!data) continue;
+          if (frame.startsWith("event: snapshot")) {
+            snapshot = JSON.parse(data); client.load(snapshot);
+            if (onSnapshot) onSnapshot();
+            else { req.destroy(); resolve(snapshot); }
+          } else if (frame.startsWith("event: ops")) {
+            const ops: Op[] = JSON.parse(data); client.apply(ops);
+            if (ops.some((op) => op.op === "history-remove" && op.id === "child")) {
+              req.destroy(); resolve(snapshot);
+            }
+          }
+        }
+      });
+    });
+    req.setTimeout(5000, () => req.destroy(new Error("SSE test timed out")));
+    req.on("error", reject); req.end();
+  });
+
+  const first = await stream(hub.port);
+  const reloaded = JSON.parse((await http(hub.port, "/api/state")).body) as Snapshot;
+  const reconnected = await stream(hub.port);
+  assert.deepEqual(first.history, reloaded.history);
+  assert.deepEqual(first.history, reconnected.history);
+  assert.equal(client.history.get("child")?.archived, true);
+  assert.equal(client.agents.has("child"), false);
+  await stream(hub.port, () => {
+    now += 1000;
+    hub.ingest({ type: "session.status", properties: { sessionID: "root", status: { type: "busy" } } });
+    hub.ingest({ type: "session.deleted", properties: { info: { id: "child" } } });
+  });
+  assert.equal(client.history.get("root")?.intervals.at(-1)?.state, "working");
+  assert.equal(client.history.has("child"), false);
+  await hub.close();
+  const restarted = new Hub(new Store(), { port: 0, host: "127.0.0.1", html: "", js: "" });
+  t.after(() => restarted.close()); await restarted.listen();
+  await stream(restarted.port);
+  assert.equal(client.history.size, 0);
 });

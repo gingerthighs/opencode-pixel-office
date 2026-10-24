@@ -4,6 +4,8 @@ import { Panel } from "./panel.ts";
 import { Scene } from "./scene.ts";
 import { ClientState } from "./state.ts";
 import { Timeline } from "./timeline.ts";
+import { Attention } from "./attention.ts";
+import { focusActivity } from "./activity.ts";
 
 const store = {
   get(k: string) {
@@ -34,6 +36,13 @@ const timelineToggle = $<HTMLInputElement>("timeline-toggle");
 const buildingBtn = $<HTMLButtonElement>("building");
 const timelineEl = $<HTMLElement>("timeline");
 const conn = $<HTMLElement>("conn");
+const attentionPanel = $<HTMLDetailsElement>("attention");
+attentionPanel.open = !matchMedia("(max-width: 860px)").matches;
+$<HTMLButtonElement>("attention-button").onclick = () => {
+  attentionPanel.open = true;
+  attentionPanel.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  attentionPanel.querySelector("summary")?.focus();
+};
 
 const controls = new Controls(fetch, () => (dirty = true));
 void controls.refresh();
@@ -87,7 +96,9 @@ const panel = new Panel(state, {
   personInfo: (key) => scene.personInfo(key),
   roster: () => scene.roster(),
 });
-const timeline = new Timeline(timelineEl, state, (id) => scene.workerName(id), select);
+const focusAgent = (id: string) => focusActivity(state, id, pickRoom, select);
+const timeline = new Timeline(timelineEl, state, (id) => scene.workerName(id), focusAgent);
+const attention = new Attention(state, $("attention-list"), $("attention-count"), $("connection-warning"), focusAgent, (id) => scene.workerName(id));
 
 scene.onSelect = select;
 scene.onPickRoom = pickRoom;
@@ -108,8 +119,8 @@ function chooseRoom() {
     roomId = rooms[0]?.id;
   }
   scene.setRoom(roomId);
-  if (selected && !selected.startsWith("p:") && !state.agents.has(selected)) selected = undefined;
-  scene.selected = selected;
+  if (selected && !selected.startsWith("p:") && !state.hasSelection(selected)) selected = undefined;
+  scene.selected = selected && (selected.startsWith("p:") || state.agents.has(selected)) ? selected : undefined;
 }
 
 setInterval(() => {
@@ -117,6 +128,7 @@ setInterval(() => {
   chooseRoom();
   scene.syncNow();
   panel.render(roomId, selected);
+  attention.render();
   if (timelineToggle.checked) timeline.render(roomId, selected);
   rendered = state.version;
   dirty = false;
@@ -142,6 +154,7 @@ function connect() {
     void controls.refresh();
     streamed = true;
     state.load(JSON.parse((e as MessageEvent).data) as Snapshot);
+    state.setConnected(true);
     scene.reset();
     conn.className = "conn ok";
     conn.title = "connected";
@@ -149,6 +162,8 @@ function connect() {
   });
   es.addEventListener("ops", (e) => state.apply(JSON.parse((e as MessageEvent).data) as Op[]));
   es.onerror = () => {
+    state.setConnected(false);
+    dirty = true;
     conn.className = "conn bad";
     conn.title = "disconnected – reconnecting…";
   };

@@ -5,6 +5,8 @@ import { lookOf, roleOf, STATUS_COLOR, STATUS_LABEL } from "./roles.ts";
 import type { PersonInfo } from "./scene.ts";
 import { avatarURL, iconURL, toolIcon, type IconName } from "./sprites.ts";
 import type { ClientState } from "./state.ts";
+import { swap } from "./dom.ts";
+import { activityTotals, duration } from "./activity.ts";
 
 const STALE_ROOM = 2 * 60 * 60 * 1000;
 
@@ -20,12 +22,6 @@ function img(src: string, cls: string, alt = ""): HTMLImageElement {
   i.src = src;
   i.alt = alt;
   return i;
-}
-
-/** Replace children only when the markup actually changed, so hover/clicks survive the 250ms refresh. */
-function swap(container: HTMLElement, nodes: HTMLElement[]) {
-  const html = nodes.map((n) => n.outerHTML).join("");
-  if (container.innerHTML !== html) container.replaceChildren(...nodes);
 }
 
 /** Fixed child sections, each swapped on its own, so a changing feed never replaces the buttons above it. */
@@ -115,7 +111,7 @@ export class Panel {
     this.renderTabs(roomId);
     this.renderList(roomId, selected);
     if (selected?.startsWith("p:")) this.renderPerson(selected);
-    else this.renderDetail(selected ? this.state.agents.get(selected) : undefined);
+    else this.renderDetail(selected ? this.state.detailAgent(selected) : undefined);
   }
 
   private renderTabs(current?: string) {
@@ -230,6 +226,8 @@ export class Panel {
       return;
     }
     const worker = this.cb.personInfo(a.id);
+    const history = this.state.history.get(a.id);
+    const archived = history?.archived || !this.state.agents.has(a.id);
     const head = el("div", "d-head");
     head.append(img(avatarURL(worker?.look ?? lookOf(a.name, a.id)), "avatar big", a.name));
     const names = el("div", "d-names");
@@ -239,13 +237,15 @@ export class Panel {
     head.append(names);
     const [secHead, secAsk, secInfo, secFeed] = sections(this.detail, 4);
     const headParts: HTMLElement[] = [head];
+    if (archived) headParts.push(el("div", "muted-inline", `Archived · ${a.outcome ?? "completed"} · read-only`));
+    if (a.failure) headParts.push(el("div", "fb err", a.failure.message));
     if (a.title) headParts.push(el("div", "d-title", a.title));
     if (worker && worker.status && a.status !== "busy") headParts.push(el("div", "muted-inline", worker.status));
     swap(secHead, headParts);
 
     const askParts: HTMLElement[] = [];
-    if (a.ask) askParts.push(this.askBox(a));
-    const ctl = this.controls(a);
+    if (!archived && a.ask) askParts.push(this.askBox(a));
+    const ctl = archived ? undefined : this.controls(a);
     if (ctl) askParts.push(ctl);
     swap(secAsk, askParts);
 
@@ -260,8 +260,13 @@ export class Panel {
     stat("Tokens", fmtTokens(a.tokens));
     stat("Cost", a.cost ? "$" + a.cost.toFixed(4) : "–");
     stat("Model", a.model ?? "–");
-    stat("Running for", fmtAge(this.state.age(a.createdAt)));
+    if (history) {
+      const totals = activityTotals(history.intervals, this.state.observedNow() - 2 * 60 * 60_000, this.state.observedNow());
+      stat("Working · retained", duration(totals.working));
+      stat("Waiting · retained", duration(totals.waiting));
+    }
     parts.push(stats);
+    if (history) parts.push(el("div", "muted-inline", `${history.truncated ? "Earlier history truncated. " : ""}Observed since ${new Date(history.firstObservedAt).toLocaleTimeString()}. Earlier activity unavailable.`));
 
     if (a.tool) {
       const cur = el("div", "current " + a.tool.state);
@@ -302,7 +307,7 @@ export class Panel {
 
     swap(secInfo, parts);
 
-    const feed = this.state.feeds.get(a.id) ?? [];
+    const feed = this.state.feeds.get(a.id) ?? history?.agent.feed ?? [];
     const fb = el("div", "feed");
     fb.append(el("h4", "", "Activity"));
     for (const f of feed.slice(-120).reverse()) {

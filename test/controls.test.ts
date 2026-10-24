@@ -1,6 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Controls } from "../web/controls.ts";
+
+test("browser fetch is called without a Controls receiver for capabilities and actions", async () => {
+  const calls: string[] = [];
+  const fetcher: typeof fetch = async function (this: unknown, input) {
+    assert.equal(this, undefined, "native browser fetch requires a compatible receiver");
+    calls.push(String(input));
+    return new Response(JSON.stringify({ control: true, nonce: "nonce" }), { status: 200 });
+  };
+  const controls = new Controls(fetcher);
+  await controls.send({ action: "interrupt", sessionID: "s" });
+  assert.deepEqual(calls, ["api/caps", "api/control"]);
+});
 import { Hub } from "../src/server.ts";
 import { Store } from "../src/store.ts";
 import { http } from "./http.ts";

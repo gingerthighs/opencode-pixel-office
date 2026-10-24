@@ -43,7 +43,8 @@ has nothing to do takes a break in the lounge.
 | 💬 **Live speech bubbles** | The current tool with a pixel icon (read, edit, bash, grep, web, task …), streamed text and reasoning. Monitors show code, a terminal or a browser. |
 | ☕ **Breaks** | Off-duty staff grab a coffee, watch TV, chill on a beanbag, play arcade games or ping-pong, check their phone, browse the web or pet the office cat. |
 | ✋ **Approvals in the UI** | Answer permission requests with *Allow once / Always allow / Reject* and stop running agents. |
-| 🧵 **Threads & timeline** | Who delegated to whom, who worked when and for how long in parallel. |
+| 🧵 **Threads & timeline** | Observed working, waiting, retrying, idle and failed intervals, with work/wait totals and 15-minute, 60-minute or two-hour windows. |
+| 🔎 **Needs attention** | Approvals, questions, unresolved failures and agents with no observed activity for 10 minutes, across every room. |
 | 🏢 **Building** | One floor per project folder, one office per session, an elevator in between. |
 | 🌙 **Day & night** | Follows your local time; at night lit by monitors, lamps and a crystal ball. |
 | 📱 **Anywhere** | Desktop and phone, local or across your LAN/Tailscale (with a token). |
@@ -188,6 +189,25 @@ Handy for links or a second screen: `?time=day|night`, `?threads=1`, `?timeline=
 
 Otto always takes the main session of a room. Subagents go to the matching free team member.
 
+### Activity history and attention
+
+Enable **Timeline** to inspect observed state changes. The default window is 60 minutes. History starts when
+the server first observes a session; it does not infer earlier work from its creation date. Completed agents
+leave the canvas after 60 seconds, but their timeline rows, summaries, outcomes and bounded activity feeds
+remain available. Click an archived row for read-only details.
+
+**Needs attention** covers all rooms: approvals/questions first, then unresolved failures, then busy or retrying
+agents with no observed activity for 10 minutes. Each group lists its oldest item first. Inactivity describes
+missing events; it does not mean an agent is stuck. Click an entry to switch rooms, disable Follow and open
+details. Questions still need an answer in the terminal. New execution clears a failure; new activity clears
+inactivity. A connection warning appears while disconnected, and inactivity escalation pauses.
+
+History lives only in server memory for two hours, bounded to 1,000 archived sessions and 10,000 closed
+intervals. Oldest closed history is evicted first and truncation is indicated; current live state is preserved.
+Browser reloads and reconnects restore the server's history. Server restarts (including plugin reloads) reset
+it. Explicit session deletion removes its retained record. No history files, external services or notifications
+are added. On phones, the attention queue starts collapsed.
+
 ## 🔐 Approvals & security
 
 - The UI shows prompts, file names and commands. By default it listens **on `127.0.0.1` only**.
@@ -296,6 +316,9 @@ web/
   characters.ts  staff (assignment workflow, breaks) + the office cat
   scene.ts       rendering, staffing, threads, building, overlays
   controls.ts    refreshed capabilities and nonce, control requests
+  activity.ts    interval clipping, totals, global attention ordering and selection
+  attention.ts   attention queue and connection warning
+  dom.ts         stable panel/queue/timeline updates
   panel.ts · timeline.ts · sprites.ts · bubbles.ts · roles.ts · state.ts · main.ts
   fonts/         Pixelify Sans (OFL), inlined at build time
 scripts/

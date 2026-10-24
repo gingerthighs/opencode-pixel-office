@@ -14,7 +14,8 @@ export class Controls {
   private changed: () => void;
 
   constructor(fetcher: typeof fetch = fetch, changed: () => void = () => {}) {
-    this.fetcher = fetcher;
+    // Native browser fetch rejects a Controls instance as its receiver.
+    this.fetcher = (...args) => fetcher(...args);
     this.changed = changed;
   }
 

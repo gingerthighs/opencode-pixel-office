@@ -1,7 +1,7 @@
 // Pure state reducer: opencode bus events in, UI diff ops out.
 // Must never throw — it runs inside opencode's event hook.
 
-import type { Agent, AgentStatus, Ask, FeedEntry, FeedKind, Op, Room, Snapshot, ToolState } from "./types.ts";
+import type { ActivityInterval, ActivityRecord, ActivityState, Agent, AgentStatus, Ask, FeedEntry, FeedKind, Op, Room, Snapshot, ToolState } from "./types.ts";
 
 const FEED_MAX = 200;
 const SNAPSHOT_FEED = 60;
@@ -9,6 +9,9 @@ const SNIPPET_LEN = 90;
 const EMIT_EVERY = 250;
 const ROOM_TOUCH_EVERY = 5000;
 export const DONE_TTL = 60_000;
+export const HISTORY_TTL = 2 * 60 * 60_000;
+export const MAX_ARCHIVED = 1000;
+export const MAX_CLOSED_INTERVALS = 10_000;
 const MAX_SEEN = 2000;
 const MAX_ROLES = 5000;
 
@@ -37,6 +40,13 @@ interface Entry {
   seen: Set<string>;
   /** callID → file path, remembered from running tool events (completion events may lack input) */
   toolPaths: Map<string, string>;
+  firstObservedAt: number;
+  intervals: ActivityInterval[];
+  archived: boolean;
+  truncated: boolean;
+  historyDirty: boolean;
+  historyLastEmit: number;
+  historyUrgent: boolean;
 }
 
 const WRITE_TOOL = /^(edit|write|patch|apply_patch|multiedit|multi_edit|str_replace|create_file)$/i;
@@ -89,6 +99,9 @@ export class Store {
   private names = new Map<string, string>();
   private roles = new Map<string, string>();
   private clock: () => number;
+  private changed = new Set<Entry>();
+  private historyTruncated = false;
+  private lastHistoryPrune = -Infinity;
 
   constructor(clock: () => number = Date.now) {
     this.clock = clock;
@@ -99,23 +112,28 @@ export class Store {
   }
 
   has(id: string) {
-    return this.entries.has(id);
+    const entry = this.entries.get(id);
+    return !!entry && !entry.archived;
   }
 
   agent(id: string): Agent | undefined {
-    return this.entries.get(id)?.agent;
+    const entry = this.entries.get(id);
+    return entry && !entry.archived ? entry.agent : undefined;
   }
 
   snapshot(): Snapshot {
     return {
       rooms: [...this.rooms.values()].map((r) => ({ ...r })),
-      agents: [...this.entries.values()].map((e) => ({ ...e.agent, feed: e.feed.slice(-SNAPSHOT_FEED) })),
+      agents: [...this.entries.values()].filter((e) => !e.archived).map((e) => ({ ...e.agent, feed: e.feed.slice(-SNAPSHOT_FEED) })),
       now: this.clock(),
+      history: [...this.entries.values()].map((e) => this.activityRecord(e)),
+      historyTruncated: this.historyTruncated,
     };
   }
 
   apply(ev: BusEvent): Op[] {
     const ops: Op[] = [];
+    this.changed.clear();
     const p = ev?.properties ?? {};
     try {
       switch (ev?.type) {
@@ -178,6 +196,13 @@ export class Store {
     } catch {
       // swallow: a malformed event must never break opencode
     }
+    const emitted = new Set(ops.filter((o) => o.op === "agent").map((o) => o.agent.id));
+    for (const e of this.changed) {
+      if (this.entries.get(e.agent.id) !== e) continue;
+      const transition = this.recordActivity(e);
+      this.emitHistory(e, ops, transition || emitted.has(e.agent.id));
+    }
+    this.changed.clear();
     return ops;
   }
 
@@ -187,13 +212,22 @@ export class Store {
     const ops: Op[] = [];
     for (const e of this.entries.values()) {
       const a = e.agent;
-      if (a.status === "done" && a.doneAt && now - a.doneAt > DONE_TTL) {
-        this.entries.delete(a.id);
+      if (!e.archived && a.status === "done" && a.doneAt !== undefined && now - a.doneAt > DONE_TTL) {
+        e.archived = true;
+        e.msgs.clear();
+        e.seen.clear();
+        e.toolPaths.clear();
         ops.push({ op: "agent-remove", id: a.id });
-        continue;
+        this.emitHistory(e, ops, true);
       }
       if (e.dirty && now - e.lastEmit >= EMIT_EVERY) this.emit(e, ops);
+      if (e.historyDirty) this.emitHistory(e, ops);
     }
+    if (now - this.lastHistoryPrune >= 1000) {
+      this.pruneHistory(now, ops);
+      this.lastHistoryPrune = now;
+    }
+    this.changed.clear();
     return ops;
   }
 
@@ -210,7 +244,9 @@ export class Store {
   }
 
   private ensure(id: string, ops: Op[]): Entry {
-    return this.entries.get(id) ?? this.upsertSession({ id }, ops, false);
+    const e = this.entries.get(id) ?? this.upsertSession({ id }, ops, false);
+    this.touch(e);
+    return e;
   }
 
   private upsertSession(info: SessionInfo, ops: Op[], created: boolean): Entry {
@@ -267,6 +303,7 @@ export class Store {
           cost: 0,
           createdAt: info.time?.created ?? now,
           updatedAt: now,
+          lastActivityAt: now,
         },
         feed: [],
         named: !!name,
@@ -276,6 +313,13 @@ export class Store {
         msgs: new Map(),
         seen: new Set(),
         toolPaths: new Map(),
+        firstObservedAt: now,
+        intervals: [],
+        archived: false,
+        truncated: false,
+        historyDirty: true,
+        historyLastEmit: -Infinity,
+        historyUrgent: true,
       };
       this.entries.set(info.id, e);
     } else {
@@ -301,6 +345,7 @@ export class Store {
       }
     }
 
+    this.touch(e);
     this.emit(e, ops);
 
     if (fresh && parentId && created) {
@@ -318,12 +363,19 @@ export class Store {
         if (e.agent.roomId === id) {
           this.entries.delete(e.agent.id);
           ops.push({ op: "agent-remove", id: e.agent.id });
+          ops.push({ op: "history-remove", id: e.agent.id });
+          this.parents.delete(e.agent.id);
+          this.names.delete(e.agent.id);
         }
       }
       ops.push({ op: "room-remove", id });
       return;
     }
-    if (this.entries.delete(id)) ops.push({ op: "agent-remove", id });
+    if (this.entries.delete(id)) {
+      ops.push({ op: "agent-remove", id }, { op: "history-remove", id });
+    }
+    this.parents.delete(id);
+    this.names.delete(id);
   }
 
   // ---- status ----
@@ -337,9 +389,19 @@ export class Store {
     if (s === "idle") {
       a.waiting = false;
       a.ask = undefined;
+      a.waitingSince = undefined;
+      a.outcome = a.failure ? "failed" : a.outcome === "interrupted" ? "interrupted" : "completed";
+      a.completedAt ??= this.clock();
       if (a.parentId) next = "done";
       else if (prev === "error") next = "error";
     }
+    if (s === "busy") {
+      e.archived = false;
+      a.failure = undefined;
+      a.outcome = undefined;
+      a.completedAt = undefined;
+    }
+    if (s === "retry") e.archived = false;
     if (next === prev) {
       if (clearedAsk) this.emit(e, ops);
       return;
@@ -360,6 +422,8 @@ export class Store {
     const e = this.ensure(id, ops);
     const a = e.agent;
     if (a.waiting === waiting && !ask && (waiting || !a.ask)) return;
+    if (waiting && (!a.waiting || ask?.id !== a.ask?.id || ask?.kind !== a.ask?.kind)) a.waitingSince = this.clock();
+    if (!waiting) a.waitingSince = undefined;
     if (waiting && (!a.waiting || ask?.id !== a.ask?.id)) this.log(e, "ask", `waiting: ${head(what, 120)}`, ops);
     a.waiting = waiting;
     a.ask = waiting ? ask : undefined;
@@ -371,11 +435,17 @@ export class Store {
     const e = this.ensure(p.sessionID, ops);
     const err = p.error ?? {};
     if (err.name === "MessageAbortedError") {
+      e.agent.outcome = "interrupted";
       this.log(e, "status", "aborted", ops);
       this.setStatus(p.sessionID, "idle", ops);
       return;
     }
     const msg = err.data?.message ?? err.message ?? err.name ?? "error";
+    e.agent.failure = { at: this.clock(), message: head(String(msg), 200) };
+    e.agent.outcome = "failed";
+    e.agent.waiting = false;
+    e.agent.ask = undefined;
+    e.agent.waitingSince = undefined;
     this.log(e, "error", head(String(msg), 200), ops);
     if (e.agent.status !== "error") {
       e.agent.status = "error";
@@ -523,6 +593,7 @@ export class Store {
   }
 
   private log(e: Entry, kind: FeedKind, text: string, ops: Op[]) {
+    this.changed.add(e);
     const entry: FeedEntry = { ts: this.clock(), kind, text };
     e.feed.push(entry);
     if (e.feed.length > FEED_MAX) e.feed.splice(0, e.feed.length - FEED_MAX);
@@ -530,6 +601,9 @@ export class Store {
   }
 
   private emit(e: Entry, ops: Op[], soft = false) {
+    this.changed.add(e);
+    e.historyDirty = true;
+    if (!soft) e.historyUrgent = true;
     const now = this.clock();
     e.agent.updatedAt = now;
     if (soft && now - e.lastEmit < EMIT_EVERY) {
@@ -538,11 +612,106 @@ export class Store {
     }
     e.dirty = false;
     e.lastEmit = now;
-    ops.push({ op: "agent", agent: { ...e.agent } });
+    if (!e.archived) ops.push({ op: "agent", agent: { ...e.agent } });
     const room = this.rooms.get(e.agent.roomId);
     if (room && now - room.updatedAt > ROOM_TOUCH_EVERY) {
       room.updatedAt = now;
       ops.push({ op: "room", room: { ...room } });
+    }
+  }
+
+  private touch(e: Entry) {
+    e.agent.lastActivityAt = this.clock();
+    e.historyDirty = true;
+    this.changed.add(e);
+  }
+
+  private recordActivity(e: Entry): boolean {
+    const a = e.agent;
+    const completed = a.status === "done" || (a.status === "error" && a.completedAt !== undefined);
+    const state: ActivityState | undefined = completed ? undefined : a.waiting ? "waiting"
+      : a.status === "busy" ? "working" : a.status === "retry" ? "retrying" : a.status === "error" ? "failed" : "idle";
+    const previous = e.intervals.at(-1);
+    const current = previous?.end === undefined ? previous : undefined;
+    if (current?.state === state) return false;
+    const now = this.clock();
+    if (current) {
+      current.end = now;
+      if (current.start === now) e.intervals.pop();
+    }
+    if (state) e.intervals.push({ state, start: now });
+    e.historyDirty = true;
+    return true;
+  }
+
+  private activityRecord(e: Entry): ActivityRecord {
+    return structuredClone({
+      agent: { ...e.agent, feed: e.feed.slice(-SNAPSHOT_FEED) },
+      firstObservedAt: e.firstObservedAt,
+      intervals: e.intervals,
+      archived: e.archived,
+      truncated: e.truncated,
+    });
+  }
+
+  private emitHistory(e: Entry, ops: Op[], force = false) {
+    if (!force && !e.historyUrgent && this.clock() - e.historyLastEmit < EMIT_EVERY) return;
+    ops.push({ op: "history", record: this.activityRecord(e) });
+    e.historyDirty = false;
+    e.historyUrgent = false;
+    e.historyLastEmit = this.clock();
+  }
+
+  private pruneHistory(now: number, ops: Op[]) {
+    const cutoff = now - HISTORY_TTL;
+    const changed = new Set<Entry>();
+    const truncated = () => {
+      if (!this.historyTruncated) ops.push({ op: "history-truncated" });
+      this.historyTruncated = true;
+    };
+    const remove = (e: Entry) => {
+      this.entries.delete(e.agent.id);
+      ops.push({ op: "history-remove", id: e.agent.id });
+      truncated();
+    };
+    for (const e of this.entries.values()) {
+      if (e.archived && (e.agent.doneAt ?? e.agent.lastActivityAt) <= cutoff) {
+        remove(e);
+        continue;
+      }
+      if (e.agent.failure && e.agent.completedAt !== undefined && e.agent.completedAt <= cutoff) {
+        e.agent.failure = undefined;
+        changed.add(e);
+        if (!e.archived) ops.push({ op: "agent", agent: { ...e.agent } });
+      }
+      const kept = e.intervals.filter((i) => i.end === undefined || i.end > cutoff);
+      if (kept.length !== e.intervals.length) {
+        e.intervals = kept;
+        e.truncated = true;
+        changed.add(e);
+        truncated();
+      }
+      for (const i of kept) if (i.end !== undefined && i.start < cutoff) {
+        i.start = cutoff;
+        e.truncated = true;
+        changed.add(e);
+        truncated();
+      }
+    }
+    const archived = [...this.entries.values()].filter((e) => e.archived)
+      .sort((a, b) => (a.agent.doneAt ?? 0) - (b.agent.doneAt ?? 0));
+    for (const e of archived.slice(0, Math.max(0, archived.length - MAX_ARCHIVED))) remove(e);
+    const closed = [...this.entries.values()].flatMap((e) => e.intervals.filter((i) => i.end !== undefined).map((i) => ({ e, i })))
+      .sort((a, b) => a.i.end! - b.i.end!);
+    const dropped = new Set(closed.slice(0, Math.max(0, closed.length - MAX_CLOSED_INTERVALS)).map(({ e, i }) => {
+      e.truncated = true;
+      changed.add(e);
+      truncated();
+      return i;
+    }));
+    for (const e of changed) if (this.entries.has(e.agent.id)) {
+      e.intervals = e.intervals.filter((i) => !dropped.has(i));
+      this.emitHistory(e, ops, true);
     }
   }
 }
