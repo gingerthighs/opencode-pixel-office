@@ -20,6 +20,12 @@
     "url": "git+https://github.com/gingerthighs/opencode-pixel-office.git"
   },
   "homepage": "https://github.com/gingerthighs/opencode-pixel-office#readme",
+  "bugs": {
+    "url": "https://github.com/gingerthighs/opencode-pixel-office/issues"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "build": "node build.ts",
     "typecheck": "node build.ts && tsc --noEmit",

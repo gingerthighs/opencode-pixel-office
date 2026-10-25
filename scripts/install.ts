@@ -90,7 +90,7 @@ const ok = (msg: string) => console.log(`✔ ${msg}`);
 
 function run(cmd: string, args: string[], shell = false) {
   const res = spawnSync(cmd, args, { cwd: ROOT, stdio: "inherit", shell });
-  if (res.status !== 0) fail(`${cmd} ${args.join(" ")} ist fehlgeschlagen`);
+  if (res.status !== 0) fail(`${cmd} ${args.join(" ")} failed`);
 }
 
 const args = parse(process.argv.slice(2));
