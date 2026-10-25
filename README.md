@@ -152,7 +152,11 @@ opencode 2.x hot-reloads the new file; open browser tabs reconnect on their own.
 ```
 
 <details>
-<summary>Manual installation</summary>
+<summary>Manual installation (no Node.js needed with the release file)</summary>
+
+Download `pixel-office.js` from the [latest release](https://github.com/gingerthighs/opencode-pixel-office/releases/latest)
+and copy it to `~/.config/opencode/plugins/`. Settings go into `~/.config/opencode/pixel-office.json` (see
+[Configuration](#-configuration)). Or build it yourself:
 
 ```bash
 npm ci && npm run build
@@ -358,7 +362,7 @@ of prompts and commands – so this is off by default, the file is readable by y
   plugin API cannot send answers.
 - **History** lives in memory and is lost when opencode restarts or the plugin reloads.
 - **Early history:** sessions that ran before the plugin loaded show up, but their past activity is unknown.
-- **Not on npm yet** – install from source with the scripts above.
+- **Not on npm yet** – use the install scripts or the file from the releases page.
 
 ## 🛠 Development
 

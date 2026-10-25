@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] – unreleased
+## [0.1.0] – 2026-10-25
 
 First public release.
 
@@ -24,3 +24,5 @@ First public release.
 - Cross-platform installer (`install.sh`, `install.ps1`) with `pixel-office.json` settings.
 - Security: localhost-only default, optional token, DNS-rebinding protection, nonce-protected controls,
   strict CSP, embedded font, opt-in debug sampling.
+
+[0.1.0]: https://github.com/gingerthighs/opencode-pixel-office/releases/tag/v0.1.0
